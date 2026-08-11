@@ -12,7 +12,8 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
-- Wrapped the toolbar popup in a rounded visual shell with transparent outer spacing and staggered entry motion.
+- Filled Chrome's native popup surface edge to edge, with fixed bilingual geometry and rounded internal cards.
+- Limited language-switch motion to the sliding selection indicator so translated copy never shifts the layout.
 - Replaced instant panel hiding with accessible bidirectional transitions using `data-expanded`, `aria-hidden`, and `inert`.
 - Smoothed launcher, status, badge, button, and progress feedback without interrupting active export tasks.
 

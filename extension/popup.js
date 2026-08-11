@@ -50,29 +50,11 @@
       return result;
     }
 
-    function animateUpdate(target) {
-      if (
-        root.matchMedia?.("(prefers-reduced-motion: reduce)").matches ||
-        typeof target.animate !== "function"
-      ) {
-        return;
-      }
-      target.animate(
-        [
-          { opacity: 0.55, transform: "translateY(-2px)" },
-          { opacity: 1, transform: "translateY(0)" },
-        ],
-        { duration: 220, easing: "cubic-bezier(.22, 1, .36, 1)" },
-      );
-    }
-
     function setFeedback(key = null, params = {}, kind = "normal") {
       const feedback = element("#popup-feedback");
       const nextText = key ? translator.t(key, params) : "";
-      const changed = feedback.textContent !== nextText || feedback.dataset.kind !== kind;
       feedback.textContent = nextText;
       feedback.dataset.kind = kind;
-      if (changed && nextText) animateUpdate(feedback);
     }
 
     function render() {
@@ -88,10 +70,8 @@
       const siteStatus = element("#popup-site-status");
       const nextSiteStatus = t(siteStatusKey);
       const nextSiteKind = siteStatusKey === "popup.siteSupported" ? "success" : "warning";
-      const siteChanged = siteStatus.textContent !== nextSiteStatus || siteStatus.dataset.kind !== nextSiteKind;
       siteStatus.textContent = nextSiteStatus;
       siteStatus.dataset.kind = nextSiteKind;
-      if (siteChanged) animateUpdate(siteStatus);
       element("#popup-language-label").textContent = t("popup.languageLabel");
       element("#popup-language-hint").textContent = t("popup.languageHint");
       const languageGroup = element("#popup-language-group");

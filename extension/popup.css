@@ -2,12 +2,11 @@
   --msbe-radius-surface: 12px;
   --msbe-radius-control: 9px;
   --msbe-motion-duration: 220ms;
-  --msbe-motion-fast: 120ms;
   --msbe-motion-ease: cubic-bezier(.22, 1, .36, 1);
   color-scheme: light;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   color: #17324d;
-  background: transparent;
+  background: #eef3f8;
 }
 
 * {
@@ -15,15 +14,16 @@
 }
 
 html {
-  background: transparent;
+  background: #eef3f8;
 }
 
 body {
   width: 320px;
+  height: 354px;
   margin: 0;
-  padding: 8px;
+  padding: 0;
   overflow: hidden;
-  background: transparent;
+  background: linear-gradient(150deg, #f8fbff 0%, #eef3f8 100%);
 }
 
 button {
@@ -31,13 +31,13 @@ button {
 }
 
 .card {
+  display: grid;
+  height: 354px;
+  grid-template-rows: 62px 54px 136px 34px;
+  gap: 12px;
   padding: 16px;
-  border: 1px solid rgb(183 199 216 / 80%);
-  border-radius: var(--msbe-radius-surface);
   overflow: hidden;
-  background: linear-gradient(150deg, #f8fbff 0%, #eef3f8 100%);
-  box-shadow: 0 12px 32px rgb(23 50 77 / 18%);
-  transform-origin: top right;
+  background: transparent;
   animation: popup-enter var(--msbe-motion-duration) var(--msbe-motion-ease) both;
 }
 
@@ -45,14 +45,18 @@ button {
   display: flex;
   align-items: center;
   gap: 11px;
-  padding-bottom: 14px;
+  min-width: 0;
+  padding-bottom: 7px;
   border-bottom: 3px solid #ed6b24;
-  animation: popup-section-enter var(--msbe-motion-duration) var(--msbe-motion-ease) 35ms both;
 }
 
 .brand img {
   flex: 0 0 auto;
   filter: drop-shadow(0 3px 6px rgb(11 79 156 / 20%));
+}
+
+.brand > div {
+  min-width: 0;
 }
 
 h1,
@@ -62,22 +66,30 @@ p {
 }
 
 h1 {
-  max-width: 225px;
+  display: -webkit-box;
+  height: 38px;
+  overflow: hidden;
   color: #0b4f9c;
   font-size: 15px;
   line-height: 1.25;
   letter-spacing: -.01em;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 #popup-version {
+  height: 14px;
   margin-top: 3px;
+  overflow: hidden;
   color: #64778a;
   font-size: 11px;
+  line-height: 14px;
+  white-space: nowrap;
 }
 
 .site-card,
 .language-card {
-  margin-top: 12px;
+  margin: 0;
   border: 1px solid #d7e0ea;
   border-radius: var(--msbe-radius-surface);
   background: #fff;
@@ -89,29 +101,37 @@ h1 {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 10px 11px;
-  animation: popup-section-enter var(--msbe-motion-duration) var(--msbe-motion-ease) 70ms both;
+  padding: 8px 10px;
 }
 
 .eyebrow {
+  min-width: 0;
+  overflow: hidden;
   color: #64778a;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: .04em;
+  text-overflow: ellipsis;
   text-transform: uppercase;
+  white-space: nowrap;
 }
 
 #popup-site-status {
+  display: -webkit-box;
+  flex: 0 0 158px;
+  inline-size: 158px;
+  max-height: 30px;
+  overflow: hidden;
   border-radius: 999px;
-  padding: 4px 7px;
-  font-size: 11px;
+  padding: 3px 7px;
+  font-size: 10.5px;
   line-height: 1.2;
-  text-align: right;
+  text-align: center;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   transition:
     color var(--msbe-motion-duration) var(--msbe-motion-ease),
-    background-color var(--msbe-motion-duration) var(--msbe-motion-ease),
-    opacity var(--msbe-motion-duration) var(--msbe-motion-ease),
-    transform var(--msbe-motion-duration) var(--msbe-motion-ease);
+    background-color var(--msbe-motion-duration) var(--msbe-motion-ease);
 }
 
 #popup-site-status[data-kind="success"] {
@@ -125,20 +145,24 @@ h1 {
 }
 
 .language-card {
-  padding: 11px;
-  animation: popup-section-enter var(--msbe-motion-duration) var(--msbe-motion-ease) 105ms both;
+  padding: 10px;
 }
 
 h2 {
+  height: 15px;
   margin-bottom: 8px;
+  overflow: hidden;
   color: #17324d;
   font-size: 12px;
+  line-height: 15px;
+  white-space: nowrap;
 }
 
 .segmented {
   position: relative;
   isolation: isolate;
   display: grid;
+  height: 38px;
   grid-template-columns: repeat(3, 1fr);
   overflow: hidden;
   border: 1px solid #b7c7d8;
@@ -173,25 +197,22 @@ h2 {
 .segmented button {
   position: relative;
   z-index: 1;
-  min-height: 32px;
+  min-width: 0;
   border: 0;
   padding: 6px 5px;
+  overflow: hidden;
   color: #35516c;
   background: transparent;
   cursor: pointer;
   font-size: 12px;
   font-weight: 650;
-  transition:
-    color var(--msbe-motion-duration) var(--msbe-motion-ease),
-    transform var(--msbe-motion-fast) var(--msbe-motion-ease);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: color var(--msbe-motion-duration) var(--msbe-motion-ease);
 }
 
 .segmented button:hover:not([aria-pressed="true"]) {
   color: #0b4f9c;
-}
-
-.segmented button:active {
-  transform: scale(.96);
 }
 
 .segmented button[aria-pressed="true"] {
@@ -205,7 +226,9 @@ h2 {
 }
 
 .hint {
+  height: 32px;
   margin-top: 8px;
+  overflow: hidden;
   color: #64778a;
   font-size: 11px;
   line-height: 1.45;
@@ -213,16 +236,13 @@ h2 {
 
 .feedback {
   height: 34px;
-  margin-top: 8px;
+  margin: 0;
   padding: 0 2px;
-  overflow: auto;
+  overflow: hidden;
   color: #526a81;
   font-size: 11px;
-  transition:
-    color var(--msbe-motion-duration) var(--msbe-motion-ease),
-    opacity var(--msbe-motion-duration) var(--msbe-motion-ease),
-    transform var(--msbe-motion-duration) var(--msbe-motion-ease);
-  animation: popup-section-enter var(--msbe-motion-duration) var(--msbe-motion-ease) 140ms both;
+  line-height: 1.45;
+  transition: color var(--msbe-motion-duration) var(--msbe-motion-ease);
 }
 
 .feedback[data-kind="success"] {
@@ -230,39 +250,22 @@ h2 {
 }
 
 .feedback[data-kind="error"] {
+  overflow-y: auto;
   color: #b42318;
 }
 
 @keyframes popup-enter {
   from {
     opacity: 0;
-    transform: translateY(-6px) scale(.98);
   }
 
   to {
     opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-@keyframes popup-section-enter {
-  from {
-    opacity: 0;
-    transform: translateY(-4px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .card,
-  .brand,
-  .site-card,
-  .language-card,
-  .feedback {
+  .card {
     animation: none;
   }
 
@@ -271,9 +274,5 @@ h2 {
   .segmented button,
   .feedback {
     transition-duration: .01ms;
-  }
-
-  .segmented button:active {
-    transform: none;
   }
 }

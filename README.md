@@ -19,7 +19,7 @@ MathSciNet exports citations one page at a time. This extension automates the co
 | --- | --- | --- | --- |
 | Opens Export, selects the page, chooses BibTeX, and collects citations automatically. | Uses only the active result paginator and verifies both the page number and record signature. | Saves progress locally so interrupted exports can resume or be downloaded partially. | Switches between Auto, 简体中文, and English without refreshing or interrupting a task. |
 
-The toolbar popup and floating export panel share a compact rounded design with smooth, restrained motion. Chrome's **Reduce motion** preference is respected automatically.
+The toolbar popup's cards and the floating export panel share a compact rounded design with smooth, restrained motion. Chrome's **Reduce motion** preference is respected automatically.
 
 ## Install from GitHub Release
 
