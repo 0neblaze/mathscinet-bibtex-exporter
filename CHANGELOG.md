@@ -2,6 +2,20 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.4.0] - 2026-08-12
+
+### Added
+
+- Shared `12px` surface corners, `9px` control corners, and restrained `220ms` motion tokens.
+- A sliding language-selection indicator synchronized with persisted popup state.
+- Reduced-motion support for the popup, floating launcher, export panel, badges, and progress updates.
+
+### Changed
+
+- Wrapped the toolbar popup in a rounded visual shell with transparent outer spacing and staggered entry motion.
+- Replaced instant panel hiding with accessible bidirectional transitions using `data-expanded`, `aria-hidden`, and `inert`.
+- Smoothed launcher, status, badge, button, and progress feedback without interrupting active export tasks.
+
 ## [0.3.0] - 2026-08-12
 
 ### Added

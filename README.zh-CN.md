@@ -19,6 +19,8 @@ MathSciNet 自身只能逐页导出引文。这个扩展会自动处理完整检
 | --- | --- | --- | --- |
 | 自动打开 Export、全选当前页、选择 BibTeX 并收集引文。 | 只使用当前结果分页器，并同时验证页码和文献签名。 | 进度保存在 Chrome 本地，可恢复任务或下载已收集内容。 | 无需刷新即可在 Auto、简体中文和 English 间切换，不会中断任务。 |
 
+工具栏 popup（弹出设置页）与网页悬浮面板采用一致的紧凑圆角设计和克制、连贯的动效，并会自动遵循 Chrome 的“减少动态效果”偏好。
+
 ## 从 GitHub Release 安装
 
 1. 打开[最新版本页面](https://github.com/0neblaze/mathscinet-bibtex-exporter/releases/latest)。

@@ -1,6 +1,6 @@
 {
   "name": "mathscinet-bibtex-exporter",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "description": "A bilingual Chrome extension for reliable, resumable bulk export of MathSciNet search results to BibTeX.",
   "license": "MIT",
