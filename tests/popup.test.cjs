@@ -111,6 +111,7 @@ test("popup defaults to auto and follows the browser language", async () => {
   assert.equal(scenario.elements.get("#popup-title").textContent, "MathSciNet BibTeX 批量导出");
   assert.equal(scenario.elements.get("#popup-site-status").textContent, "可在此页面使用");
   assert.equal(scenario.languageButtons[0].attributes["aria-pressed"], "true");
+  assert.equal(scenario.elements.get("#popup-language-group").dataset.selectedIndex, "0");
 });
 
 test("popup restores a manual language and persists a new selection", async () => {
@@ -124,6 +125,7 @@ test("popup restores a manual language and persists a new selection", async () =
   assert.deepEqual(scenario.writes, [{ [i18n.SETTINGS_KEY]: { language: "zh-CN" } }]);
   assert.equal(scenario.elements.get("#popup-feedback").textContent, "设置已保存");
   assert.equal(scenario.languageButtons[1].attributes["aria-pressed"], "true");
+  assert.equal(scenario.elements.get("#popup-language-group").dataset.selectedIndex, "1");
 });
 
 test("popup reports a failed setting write in the selected language", async () => {
@@ -137,6 +139,7 @@ test("popup reports a failed setting write in the selected language", async () =
   assert.equal(scenario.elements.get("#popup-feedback").textContent, "Could not save: disk unavailable");
   assert.equal(scenario.elements.get("#popup-feedback").dataset.kind, "error");
   assert.equal(scenario.languageButtons[2].attributes["aria-pressed"], "true");
+  assert.equal(scenario.elements.get("#popup-language-group").dataset.selectedIndex, "2");
 });
 
 test("popup surfaces setting and tab read failures instead of staying in loading state", async () => {
@@ -157,8 +160,16 @@ test("deleting the stored setting returns an open popup to Auto", async () => {
   const scenario = createScenario({ savedLanguage: "en", uiLanguage: "zh-CN" });
   await createPopup({ ...scenario, MathSciNetI18n: i18n }).initialize();
 
+  scenario.storageListeners[0](
+    { [i18n.SETTINGS_KEY]: { oldValue: { language: "en" }, newValue: { language: "zh-CN" } } },
+    "local",
+  );
+  assert.equal(scenario.languageButtons[1].attributes["aria-pressed"], "true");
+  assert.equal(scenario.elements.get("#popup-language-group").dataset.selectedIndex, "1");
+
   scenario.storageListeners[0]({ [i18n.SETTINGS_KEY]: { oldValue: { language: "en" } } }, "local");
 
   assert.equal(scenario.elements.get("#popup-title").textContent, "MathSciNet BibTeX 批量导出");
   assert.equal(scenario.languageButtons[0].attributes["aria-pressed"], "true");
+  assert.equal(scenario.elements.get("#popup-language-group").dataset.selectedIndex, "0");
 });

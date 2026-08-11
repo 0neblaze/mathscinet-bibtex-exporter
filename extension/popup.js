@@ -50,10 +50,29 @@
       return result;
     }
 
+    function animateUpdate(target) {
+      if (
+        root.matchMedia?.("(prefers-reduced-motion: reduce)").matches ||
+        typeof target.animate !== "function"
+      ) {
+        return;
+      }
+      target.animate(
+        [
+          { opacity: 0.55, transform: "translateY(-2px)" },
+          { opacity: 1, transform: "translateY(0)" },
+        ],
+        { duration: 220, easing: "cubic-bezier(.22, 1, .36, 1)" },
+      );
+    }
+
     function setFeedback(key = null, params = {}, kind = "normal") {
       const feedback = element("#popup-feedback");
-      feedback.textContent = key ? translator.t(key, params) : "";
+      const nextText = key ? translator.t(key, params) : "";
+      const changed = feedback.textContent !== nextText || feedback.dataset.kind !== kind;
+      feedback.textContent = nextText;
       feedback.dataset.kind = kind;
+      if (changed && nextText) animateUpdate(feedback);
     }
 
     function render() {
@@ -67,11 +86,17 @@
       });
       element("#popup-site-label").textContent = t("popup.siteLabel");
       const siteStatus = element("#popup-site-status");
-      siteStatus.textContent = t(siteStatusKey);
-      siteStatus.dataset.kind = siteStatusKey === "popup.siteSupported" ? "success" : "warning";
+      const nextSiteStatus = t(siteStatusKey);
+      const nextSiteKind = siteStatusKey === "popup.siteSupported" ? "success" : "warning";
+      const siteChanged = siteStatus.textContent !== nextSiteStatus || siteStatus.dataset.kind !== nextSiteKind;
+      siteStatus.textContent = nextSiteStatus;
+      siteStatus.dataset.kind = nextSiteKind;
+      if (siteChanged) animateUpdate(siteStatus);
       element("#popup-language-label").textContent = t("popup.languageLabel");
       element("#popup-language-hint").textContent = t("popup.languageHint");
-      element("#popup-language-group").setAttribute("aria-label", t("popup.ariaLanguage"));
+      const languageGroup = element("#popup-language-group");
+      languageGroup.setAttribute("aria-label", t("popup.ariaLanguage"));
+      languageGroup.dataset.selectedIndex = String({ auto: 0, "zh-CN": 1, en: 2 }[setting]);
 
       const labels = {
         auto: t("popup.auto"),

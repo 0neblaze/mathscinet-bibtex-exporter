@@ -40,7 +40,7 @@ class FakeElement {
       const child = new FakeElement(match[1], "", attributes);
       child.id = match[3];
       child.disabled = /\bdisabled\b/i.test(attributesText);
-      child.hidden = /\bhidden\b/i.test(attributesText);
+      child.hidden = /(?:^|\s)hidden(?:\s|$)/i.test(attributesText);
       child.parentElement = this;
       this.childrenById.set(child.id, child);
     }
@@ -255,7 +255,7 @@ function createOnePageScenario({
     }, totalDelayMs);
   }
 
-  return { cardoneAuthor, downloads, exportButton, root, selectAll, storage };
+  return { cardoneAuthor, document, downloads, exportButton, root, selectAll, storage };
 }
 
 function createThreePageScenario({ disableNextOnPage = null, duplicatePagerNext = false, includePagerNext = true } = {}) {
@@ -586,16 +586,44 @@ test("the exporter mounts as a collapsed floating button and toggles its panel",
   const collapse = scenario.document.querySelector("#msbe-collapse");
   assert.ok(launcher);
   assert.ok(panel);
-  assert.equal(panel.hidden, true);
+  assert.equal(panel.hidden, false);
+  assert.equal(panel.getAttribute("data-expanded"), "false");
+  assert.equal(panel.getAttribute("aria-hidden"), "true");
+  assert.equal(panel.inert, true);
   assert.equal(launcher.getAttribute("aria-expanded"), "false");
 
   launcher.click();
-  assert.equal(panel.hidden, false);
+  assert.equal(panel.getAttribute("data-expanded"), "true");
+  assert.equal(panel.getAttribute("aria-hidden"), "false");
+  assert.equal(panel.inert, false);
   assert.equal(launcher.getAttribute("aria-expanded"), "true");
 
   collapse.click();
-  assert.equal(panel.hidden, true);
+  assert.equal(panel.getAttribute("data-expanded"), "false");
+  assert.equal(panel.getAttribute("aria-hidden"), "true");
+  assert.equal(panel.inert, true);
   assert.equal(launcher.getAttribute("aria-expanded"), "false");
+});
+
+test("collapsing the panel does not interrupt or reset a running export", async () => {
+  const scenario = createOnePageScenario();
+  const exporter = createExporter(scenario.root);
+  await exporter.initialize();
+
+  const task = exporter.runExport();
+  const launcher = scenario.document.querySelector("#msbe-launcher");
+  const collapse = scenario.document.querySelector("#msbe-collapse");
+  launcher.click();
+  const beforeCollapse = exporter.getState();
+  assert.equal(beforeCollapse.running, true);
+
+  collapse.click();
+  const afterCollapse = exporter.getState();
+  assert.deepEqual(afterCollapse, beforeCollapse);
+  assert.equal(scenario.document.querySelector("#msbe-panel").getAttribute("aria-hidden"), "true");
+
+  await task;
+  assert.equal(exporter.getState().jobStatus, "complete");
 });
 
 test("the panel follows the browser language by default and restores a manual override", async () => {

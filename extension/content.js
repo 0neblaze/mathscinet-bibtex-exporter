@@ -74,6 +74,19 @@
     return error;
   }
 
+  function animateUpdate(element, keyframes) {
+    if (
+      root.matchMedia?.("(prefers-reduced-motion: reduce)").matches ||
+      typeof element?.animate !== "function"
+    ) {
+      return;
+    }
+    element.animate(keyframes, {
+      duration: 220,
+      easing: "cubic-bezier(.22, 1, .36, 1)",
+    });
+  }
+
   function sleep(milliseconds) {
     return new Promise((resolve) => setTimeout(resolve, milliseconds));
   }
@@ -177,8 +190,16 @@
     currentStatusKind = kind;
     const status = document.querySelector("#msbe-status");
     if (status) {
-      status.textContent = renderMessage(currentStatus);
+      const nextText = renderMessage(currentStatus);
+      const changed = status.textContent !== nextText || status.dataset.kind !== kind;
+      status.textContent = nextText;
       status.dataset.kind = kind;
+      if (changed) {
+        animateUpdate(status, [
+          { opacity: 0.55, transform: "translateY(-2px)" },
+          { opacity: 1, transform: "translateY(0)" },
+        ]);
+      }
     }
     const launcher = document.querySelector("#msbe-launcher");
     if (launcher) {
@@ -213,8 +234,16 @@
     }
     const badge = document.querySelector("#msbe-launcher-badge");
     if (badge) {
+      const nextBadge = state.pages ? `${state.page}/${state.pages}` : "";
+      const badgeChanged = badge.textContent !== nextBadge;
       badge.hidden = !state.pages;
-      badge.textContent = state.pages ? `${state.page}/${state.pages}` : "";
+      badge.textContent = nextBadge;
+      if (badgeChanged && nextBadge) {
+        animateUpdate(badge, [
+          { transform: "scale(.82)" },
+          { transform: "scale(1)" },
+        ]);
+      }
     }
     setButtons();
   }
@@ -746,7 +775,10 @@
     collapse.setAttribute("aria-label", translator.t("panel.ariaCollapse"));
     collapse.setAttribute("title", translator.t("panel.collapse"));
     const launcher = document.querySelector("#msbe-launcher");
-    launcher.setAttribute("aria-label", translator.t(panel.hidden ? "panel.ariaExpand" : "panel.ariaCollapse"));
+    launcher.setAttribute(
+      "aria-label",
+      translator.t(panel.getAttribute("data-expanded") === "true" ? "panel.ariaCollapse" : "panel.ariaExpand"),
+    );
     document.querySelector("#msbe-progress-bar").setAttribute("aria-label", translator.t("panel.ariaProgress"));
     setStatus(currentStatus, currentStatusKind);
     setProgress();
@@ -787,37 +819,44 @@
     rootElement.id = "msbe-root";
     rootElement.innerHTML = `
       <style>
+        #msbe-root{--msbe-radius-surface:12px;--msbe-radius-control:9px;--msbe-motion-duration:220ms;--msbe-motion-fast:120ms;--msbe-motion-ease:cubic-bezier(.22, 1, .36, 1)}
         #msbe-root,#msbe-root *{box-sizing:border-box}
-        #msbe-launcher{position:fixed;right:18px;bottom:18px;z-index:2147483647;width:48px;height:48px;border:2px solid #fff;border-radius:50%;background:#0b4f9c;color:#fff;box-shadow:0 7px 22px rgba(11,79,156,.32),0 2px 7px rgba(23,50,77,.22);cursor:pointer;font:700 16px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;transition:transform .16s ease,background .16s ease,box-shadow .16s ease}
-        #msbe-launcher:hover{background:#083f7d;transform:translateY(-2px);box-shadow:0 9px 25px rgba(11,79,156,.38),0 3px 8px rgba(23,50,77,.2)} #msbe-launcher:focus-visible{outline:3px solid rgba(237,107,36,.55);outline-offset:3px}
+        #msbe-launcher{position:fixed;right:18px;bottom:18px;z-index:2147483647;width:48px;height:48px;border:2px solid #fff;border-radius:50%;background:#0b4f9c;color:#fff;box-shadow:0 7px 22px rgba(11,79,156,.32),0 2px 7px rgba(23,50,77,.22);cursor:pointer;font:700 16px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;transition:transform var(--msbe-motion-duration) var(--msbe-motion-ease),background-color var(--msbe-motion-duration) var(--msbe-motion-ease),box-shadow var(--msbe-motion-duration) var(--msbe-motion-ease)}
+        #msbe-launcher:hover{background:#083f7d;transform:translateY(-2px) scale(1.03);box-shadow:0 10px 27px rgba(11,79,156,.38),0 3px 8px rgba(23,50,77,.2)} #msbe-launcher:active{transform:translateY(0) scale(.94);transition-duration:var(--msbe-motion-fast)} #msbe-launcher:focus-visible{outline:3px solid rgba(237,107,36,.55);outline-offset:3px}
         #msbe-launcher[data-kind="success"]{background:#167744} #msbe-launcher[data-kind="error"]{background:#b42318} #msbe-launcher[data-kind="warning"]{background:#a15c00}
         #msbe-launcher-mark{display:inline-flex;align-items:baseline;gap:1px;letter-spacing:-1px} #msbe-launcher-mark strong{color:#fff;font-size:17px} #msbe-launcher-mark i{color:#ffb176;font:800 14px/1 sans-serif}
-        #msbe-launcher-badge{position:absolute;right:-8px;top:-7px;min-width:27px;padding:3px 5px;border:2px solid #fff;border-radius:12px;background:#ed6b24;color:#fff;font:700 10px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-variant-numeric:tabular-nums;box-shadow:0 2px 6px rgba(23,50,77,.22)}
-        #msbe-launcher-badge[hidden],#msbe-panel[hidden]{display:none!important}
-        #msbe-panel{position:fixed;right:18px;bottom:78px;z-index:2147483647;width:min(336px,calc(100vw - 36px));max-height:calc(100vh - 110px);overflow:auto;padding:0;border:1px solid #c8d5e2;border-radius:13px;background:#fff;color:#17324d;box-shadow:0 12px 34px rgba(23,50,77,.22);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+        #msbe-launcher-badge{position:absolute;right:-8px;top:-7px;min-width:27px;padding:3px 5px;border:2px solid #fff;border-radius:12px;background:#ed6b24;color:#fff;font:700 10px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-variant-numeric:tabular-nums;box-shadow:0 2px 6px rgba(23,50,77,.22);transform-origin:center;transition:transform var(--msbe-motion-duration) var(--msbe-motion-ease),opacity var(--msbe-motion-duration) var(--msbe-motion-ease)}
+        #msbe-launcher-badge[hidden]{display:none!important}
+        #msbe-launcher-badge:not([hidden]){animation:msbe-badge-pop var(--msbe-motion-duration) var(--msbe-motion-ease)}
+        #msbe-panel{position:fixed;right:18px;bottom:78px;z-index:2147483647;width:min(336px,calc(100vw - 36px));max-height:calc(100vh - 110px);overflow:auto;padding:0;border:1px solid #c8d5e2;border-radius:var(--msbe-radius-surface);background:#fff;color:#17324d;box-shadow:0 12px 34px rgba(23,50,77,.22);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;transform-origin:bottom right;will-change:transform,opacity;transition:opacity var(--msbe-motion-duration) var(--msbe-motion-ease),transform var(--msbe-motion-duration) var(--msbe-motion-ease),visibility 0s linear var(--msbe-motion-duration)}
+        #msbe-panel[data-expanded="false"]{visibility:hidden;pointer-events:none;opacity:0;transform:translateY(10px) scale(.98)}
+        #msbe-panel[data-expanded="true"]{visibility:visible;pointer-events:auto;opacity:1;transform:translateY(0) scale(1);transition-delay:0s}
         #msbe-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0;padding:13px 14px 10px;border-bottom:3px solid #ed6b24;background:linear-gradient(135deg,#0b4f9c,#0a417f);color:#fff}
         #msbe-panel h2{margin:0;font-size:16px;line-height:1.25;letter-spacing:-.01em}
-        #msbe-collapse{flex:0 0 auto;width:28px;height:28px;border:1px solid rgba(255,255,255,.32);border-radius:7px;background:rgba(255,255,255,.1);color:#fff;cursor:pointer;font-size:21px;line-height:1}
-        #msbe-collapse:hover{background:rgba(255,255,255,.2)} #msbe-collapse:focus-visible{outline:3px solid rgba(255,177,118,.7);outline-offset:2px}
+        #msbe-collapse{flex:0 0 auto;width:28px;height:28px;border:1px solid rgba(255,255,255,.32);border-radius:var(--msbe-radius-control);background:rgba(255,255,255,.1);color:#fff;cursor:pointer;font-size:21px;line-height:1;transition:background-color var(--msbe-motion-duration) var(--msbe-motion-ease),transform var(--msbe-motion-fast) var(--msbe-motion-ease)}
+        #msbe-collapse:hover{background:rgba(255,255,255,.2)} #msbe-collapse:active{transform:scale(.9)} #msbe-collapse:focus-visible{outline:3px solid rgba(255,177,118,.7);outline-offset:2px}
         #msbe-body{padding:13px 14px 14px}
-        #msbe-status{min-height:42px;margin:0 0 9px;overflow-wrap:anywhere;color:#294963}
+        #msbe-status{min-height:42px;margin:0 0 9px;overflow-wrap:anywhere;color:#294963;transition:color var(--msbe-motion-duration) var(--msbe-motion-ease),opacity var(--msbe-motion-duration) var(--msbe-motion-ease),transform var(--msbe-motion-duration) var(--msbe-motion-ease)}
         #msbe-status[data-kind="success"]{color:#0e6b3e} #msbe-status[data-kind="error"]{color:#b42318} #msbe-status[data-kind="warning"]{color:#8a5200}
         #msbe-progress-row{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 7px}
         #msbe-progress{margin:0;color:#526a81;font-size:12px;font-weight:650;font-variant-numeric:tabular-nums}
         #msbe-progress-track{height:6px;margin:0 0 12px;overflow:hidden;border-radius:99px;background:#e5edf5}
-        #msbe-progress-bar{width:0;height:100%;border-radius:inherit;background:linear-gradient(90deg,#0b4f9c 0%,#1769b5 72%,#ed6b24 100%);transition:width .2s ease}
+        #msbe-progress-bar{width:0;height:100%;border-radius:inherit;background:linear-gradient(90deg,#0b4f9c 0%,#1769b5 72%,#ed6b24 100%);transition:width var(--msbe-motion-duration) var(--msbe-motion-ease)}
         #msbe-actions{display:grid;grid-template-columns:1fr auto;gap:7px}
-        #msbe-actions button{min-height:35px;border:1px solid #0b4f9c;border-radius:8px;padding:7px 10px;background:#0b4f9c;color:#fff;cursor:pointer;font-weight:650;line-height:1.2}
+        #msbe-actions button{min-height:35px;border:1px solid #0b4f9c;border-radius:var(--msbe-radius-control);padding:7px 10px;background:#0b4f9c;color:#fff;cursor:pointer;font-weight:650;line-height:1.2;transition:background-color var(--msbe-motion-duration) var(--msbe-motion-ease),color var(--msbe-motion-duration) var(--msbe-motion-ease),transform var(--msbe-motion-fast) var(--msbe-motion-ease),opacity var(--msbe-motion-duration) var(--msbe-motion-ease)}
         #msbe-actions button:hover:not(:disabled){background:#083f7d} #msbe-actions button:focus-visible{outline:3px solid rgba(237,107,36,.42);outline-offset:2px}
+        #msbe-actions button:active:not(:disabled){transform:scale(.97)}
         #msbe-actions button:nth-child(n+2){background:#fff;color:#0b4f9c}
         #msbe-actions button:nth-child(n+2):hover:not(:disabled){background:#eef5fb}
         #msbe-partial{grid-column:1/-1}
         #msbe-actions button:disabled{cursor:not-allowed;opacity:.45}
+        @keyframes msbe-badge-pop{0%{opacity:0;transform:scale(.72)}70%{opacity:1;transform:scale(1.08)}100%{opacity:1;transform:scale(1)}}
+        @media (prefers-reduced-motion: reduce){#msbe-panel,#msbe-launcher,#msbe-launcher-badge,#msbe-status,#msbe-progress-bar,#msbe-collapse,#msbe-actions button{animation:none!important;transition-duration:.01ms!important;transition-delay:0s!important}#msbe-panel[data-expanded="false"]{transform:none}#msbe-panel[data-expanded="true"]{transform:none}#msbe-launcher:hover,#msbe-launcher:active,#msbe-collapse:active,#msbe-actions button:active:not(:disabled){transform:none}}
       </style>
       <button id="msbe-launcher" type="button" aria-controls="msbe-panel" aria-expanded="false">
         <span id="msbe-launcher-mark" aria-hidden="true"><strong>B</strong><i>↓</i></span><span id="msbe-launcher-badge" hidden></span>
       </button>
-      <section id="msbe-panel" hidden aria-labelledby="msbe-title">
+      <section id="msbe-panel" data-expanded="false" aria-hidden="true" aria-labelledby="msbe-title">
         <div id="msbe-heading">
           <h2 id="msbe-title"></h2>
           <button id="msbe-collapse" type="button">×</button>
@@ -839,12 +878,15 @@
     const launcher = rootElement.querySelector("#msbe-launcher");
     const panel = rootElement.querySelector("#msbe-panel");
     const setPanelExpanded = (expanded) => {
-      panel.hidden = !expanded;
+      panel.setAttribute("data-expanded", String(expanded));
+      panel.setAttribute("aria-hidden", String(!expanded));
+      panel.inert = !expanded;
       launcher.setAttribute("aria-expanded", String(expanded));
       launcher.setAttribute("aria-label", translator.t(expanded ? "panel.ariaCollapse" : "panel.ariaExpand"));
     };
+    setPanelExpanded(false);
     launcher.addEventListener("click", () => {
-      setPanelExpanded(panel.hidden);
+      setPanelExpanded(panel.getAttribute("data-expanded") !== "true");
     });
     rootElement.querySelector("#msbe-collapse").addEventListener("click", () => setPanelExpanded(false));
 
