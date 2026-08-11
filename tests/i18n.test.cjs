@@ -7,7 +7,7 @@ const {
   SETTINGS_KEY,
   createTranslator,
   resolveLanguage,
-} = require("./i18n.js");
+} = require("../extension/i18n.js");
 
 test("language settings use a separate stable storage key and default to auto", () => {
   assert.equal(SETTINGS_KEY, "mathscinetBibtexExporterSettingsV1");

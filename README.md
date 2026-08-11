@@ -1,57 +1,88 @@
-# MathSciNet BibTeX Batch Exporter
+<div align="center">
+  <img src="extension/icons/icon-128.png" width="96" height="96" alt="MathSciNet BibTeX Batch Exporter icon">
+  <h1>MathSciNet BibTeX Batch Exporter</h1>
+  <p>A bilingual Chrome extension for reliable, resumable bulk export of MathSciNet search results.</p>
+</div>
 
-本地 Chrome 扩展，用于把当前 MathSciNet 检索结果自动逐页导出为一个去重后的 BibTeX 文件。扩展提供中文和 English 界面，只在 MathSciNet 页面内运行，不会向第三方服务上传检索结果或 BibTeX 数据。
+English | [简体中文](README.zh-CN.md)
 
-## 功能
+[![Latest Release](https://img.shields.io/github/v/release/0neblaze/mathscinet-bibtex-exporter?display_name=tag&sort=semver)](https://github.com/0neblaze/mathscinet-bibtex-exporter/releases/latest)
+[![CI](https://github.com/0neblaze/mathscinet-bibtex-exporter/actions/workflows/ci.yml/badge.svg)](https://github.com/0neblaze/mathscinet-bibtex-exporter/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-0b4f9c.svg)](LICENSE)
+![Chrome Manifest V3](https://img.shields.io/badge/Chrome-Manifest%20V3-ed6b24)
 
-- 点击一次“全部导出”后，自动展开 MathSciNet 的 Export 区、全选当前页并获取 BibTeX。
-- 自动切换为每页 100 条，并通过当前结果分页器逐页处理。
-- 按引用键去重，完成后下载一个合并的 `.bib` 文件。
-- 页面右下角默认只显示悬浮按钮；展开后可查看进度、停止任务或下载已收集结果。
-- 点击 Chrome 右上角扩展图标，可在 `Auto / 中文 / English` 间切换；已打开的网页面板会立即同步，不会中断任务。
-- 中途失败或停止时，把已收集内容保存在 Chrome 本地存储中，以便恢复或部分下载。
+## Why this extension?
 
-## 从 GitHub Release 安装
+MathSciNet exports citations one page at a time. This extension automates the complete result set while keeping the process visible and recoverable.
 
-1. 从 GitHub Release 下载 `mathscinet-bibtex-exporter-v0.3.0.zip`。
-2. 解压 ZIP；不要直接把 ZIP 拖入 Chrome。
-3. 在 Chrome 地址栏打开 `chrome://extensions`。
-4. 打开右上角“开发者模式”。
-5. 点击“加载已解压的扩展程序”，选择刚解压的目录。
-6. 刷新 MathSciNet 搜索结果页。
+| One-click export | Safe pagination | Resumable | Bilingual |
+| --- | --- | --- | --- |
+| Opens Export, selects the page, chooses BibTeX, and collects citations automatically. | Uses only the active result paginator and verifies both the page number and record signature. | Saves progress locally so interrupted exports can resume or be downloaded partially. | Switches between Auto, 简体中文, and English without refreshing or interrupting a task. |
 
-该扩展没有 Chrome Web Store 签名，因此发布包使用可审计的 ZIP，不提供 `.crx`。
+## Install from GitHub Release
 
-## 从源码安装
+1. Open the [latest release](https://github.com/0neblaze/mathscinet-bibtex-exporter/releases/latest).
+2. Download the asset named `mathscinet-bibtex-exporter-v<version>.zip` — **not** GitHub's automatically generated “Source code” archives.
+3. Extract the ZIP. It creates a folder named `mathscinet-bibtex-exporter-v<version>`.
+4. Open `chrome://extensions` in Chrome and enable **Developer mode**.
+5. Select **Load unpacked** and choose the extracted folder.
+6. Refresh an open MathSciNet search-results page.
 
-按照上面的 Chrome 操作步骤，直接选择本仓库根目录即可。
+The SHA-256 checksum is published beside the ZIP. This project does not distribute a `.crx` file because unpacked extensions are auditable and do not depend on Chrome Web Store signing.
 
-## 使用
+## Use
 
-1. 在 MathSciNet 中完成检索并停留在结果列表页。
-2. 如需切换语言，点击 Chrome 右上角扩展图标。首次默认为 `Auto`：浏览器语言为中文时使用简体中文，否则使用 English。
-3. 点击页面右下角圆形悬浮按钮，再点击“全部导出”或 `Export all`。不需要手动点击 MathSciNet 自身的 Export 按钮。
-4. 任务运行时可以收起面板，但请保持该标签页打开，不要手动翻页或修改检索条件。
-5. 完成后 Chrome 会下载 `mathscinet_日期_记录数_records.bib`。
+1. Run a publications search in MathSciNet.
+2. Click the 48 px floating button in the lower-right corner.
+3. Select **Export all**. The task continues even when the panel is collapsed.
+4. Keep the tab open and avoid manually changing the query or page while the export is running.
+5. Chrome downloads one deduplicated `.bib` file when the collected count matches MathSciNet's live total.
 
-扩展不会创建欢迎页、初始化页或独立设置页，也不会在安装后自动打开新标签页。
+If a site change or network interruption stops the task, use **Download collected** to preserve the records already captured.
 
-若网站界面变化导致中途失败，展开面板并点击“下载已收集”即可保存部分结果。错误信息会保留预期页码等诊断信息。
+## Language
 
-## 本地验证与打包
+Click the extension icon in Chrome's toolbar and choose:
+
+- **Auto** — Simplified Chinese for Chinese browser locales, English otherwise.
+- **中文** — always use Simplified Chinese.
+- **English** — always use English.
+
+An open MathSciNet panel updates immediately. Page number, collected records, progress, and task state are not reset.
+
+## Privacy and permissions
+
+- `storage`: stores export progress and the language preference in Chrome's local extension storage.
+- `clipboardRead`: reads BibTeX only when MathSciNet exposes generated citations through its copy control.
+- Site access is limited to `mathscinet.ams.org` and the University of Nottingham EZproxy host.
+- No analytics, tracking, external fonts, or third-party network services are used.
+
+## Troubleshooting
+
+- Make sure you downloaded the named Release asset instead of the Source code archive.
+- After updating the extension, click **Reload** on `chrome://extensions` and refresh MathSciNet.
+- Keep MathSciNet's result page open during an export.
+- If pagination or result counts no longer match, stop rather than clicking controls manually; the panel retains partial records for download.
+
+## Development
 
 ```bash
-node --test *.test.cjs
-./scripts/package-release.sh
+git clone https://github.com/0neblaze/mathscinet-bibtex-exporter.git
+cd mathscinet-bibtex-exporter
+npm test
+npm run check
+npm run package
 ```
 
-打包产物生成在 `dist/`，包括 Release ZIP 和对应的 SHA-256 校验文件。ZIP 根目录直接包含可加载的扩展文件；脚本会拒绝打包与 `manifest.json` 版本不一致的版本号。
+Load [`extension/`](extension/) directly for source-based testing. Reproducible Release assets are written to the ignored `dist/` directory.
 
-## 当前支持的站点
+## Supported sites
 
-- `mathscinet.ams.org`
-- University of Nottingham EZproxy 下的 MathSciNet
+- `https://mathscinet.ams.org/`
+- University of Nottingham EZproxy for MathSciNet
 
-## License
+## Contributing and security
 
-[MIT](LICENSE)
+Issues and pull requests are welcome in English or Chinese. See [CONTRIBUTING.md](CONTRIBUTING.md) before submitting a change. Please report security concerns according to [SECURITY.md](SECURITY.md).
+
+Released under the [MIT License](LICENSE).

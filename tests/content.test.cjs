@@ -1,9 +1,9 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const lib = require("./lib.js");
-const i18n = require("./i18n.js");
-const { createExporter } = require("./content.js");
+const lib = require("../extension/lib.js");
+const i18n = require("../extension/i18n.js");
+const { createExporter } = require("../extension/content.js");
 
 class FakeElement {
   constructor(tagName, text = "", attributes = {}) {

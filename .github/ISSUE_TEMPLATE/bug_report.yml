@@ -1,0 +1,51 @@
+name: Bug report / 错误报告
+description: Report reproducible incorrect behavior. / 报告可复现的错误行为。
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not include proxy credentials, session cookies, private search history, or copyrighted citation output.
+        请勿提交代理凭据、会话 Cookie、私人检索历史或受版权保护的引文内容。
+  - type: input
+    id: version
+    attributes:
+      label: Extension version / 扩展版本
+      placeholder: 0.3.0
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: Chrome version and operating system / Chrome 版本与操作系统
+      placeholder: Chrome 140, macOS 27
+    validations:
+      required: true
+  - type: dropdown
+    id: site
+    attributes:
+      label: MathSciNet access route / MathSciNet 访问方式
+      options:
+        - mathscinet.ams.org
+        - University of Nottingham EZproxy
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps / 复现步骤
+      description: Include the page number and visible status, but remove private query content if necessary.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and actual behavior / 预期与实际行为
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Redacted diagnostics / 已脱敏诊断信息
+      render: text

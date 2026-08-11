@@ -1,8 +1,9 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const i18n = require("./i18n.js");
-const { createPopup, isSupportedMathSciNetUrl } = require("./popup.js");
+const i18n = require("../extension/i18n.js");
+const { createPopup, isSupportedMathSciNetUrl } = require("../extension/popup.js");
+const projectVersion = require("../package.json").version;
 
 class FakeElement {
   constructor(language = null) {
@@ -52,7 +53,7 @@ function createScenario({
   const storageListeners = [];
   const chrome = {
     i18n: { getUILanguage: () => uiLanguage },
-    runtime: { getManifest: () => ({ version: "0.3.0" }) },
+    runtime: { getManifest: () => ({ version: projectVersion }) },
     storage: {
       local: {
         async get() {

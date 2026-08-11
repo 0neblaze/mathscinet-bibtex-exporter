@@ -5,7 +5,7 @@ from PIL import Image, ImageDraw
 
 
 ROOT = Path(__file__).resolve().parent.parent
-OUTPUT = ROOT / "icons"
+OUTPUT = ROOT / "extension" / "icons"
 BLUE = "#0B4F9C"
 BLUE_LIGHT = "#1769B5"
 ORANGE = "#ED6B24"

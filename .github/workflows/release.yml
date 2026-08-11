@@ -1,0 +1,58 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Use Node.js 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - name: Validate tag and project versions
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          VERSION="${TAG_NAME#v}"
+          PACKAGE_VERSION="$(node -p 'require("./package.json").version')"
+          MANIFEST_VERSION="$(node -p 'require("./extension/manifest.json").version')"
+          test "$TAG_NAME" = "v$PACKAGE_VERSION"
+          test "$PACKAGE_VERSION" = "$MANIFEST_VERSION"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+      - name: Run tests and syntax checks
+        run: npm run check
+      - name: Build and verify Release asset
+        run: |
+          npm run package -- "$VERSION"
+          cd dist
+          sha256sum --check "mathscinet-bibtex-exporter-v${VERSION}.zip.sha256"
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          if gh release view "$TAG_NAME" >/dev/null 2>&1; then
+            gh release edit "$TAG_NAME" \
+              --title "MathSciNet BibTeX Batch Exporter $TAG_NAME" \
+              --latest
+          else
+            gh release create "$TAG_NAME" \
+              --verify-tag \
+              --title "MathSciNet BibTeX Batch Exporter $TAG_NAME" \
+              --generate-notes \
+              --latest
+          fi
+          gh release upload "$TAG_NAME" \
+            "dist/mathscinet-bibtex-exporter-v${VERSION}.zip#Chrome extension" \
+            "dist/mathscinet-bibtex-exporter-v${VERSION}.zip.sha256#SHA-256 checksum" \
+            --clobber

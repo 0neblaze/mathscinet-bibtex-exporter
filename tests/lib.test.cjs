@@ -7,7 +7,7 @@ const {
   parseResultCount,
   sanitizeFilename,
   splitBibtexEntries,
-} = require("./lib.js");
+} = require("../extension/lib.js");
 
 const ENTRY_A = `@article{MR1234567,
   author = {Doe, Jane},

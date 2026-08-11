@@ -3,11 +3,12 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 
-const root = __dirname;
+const root = path.join(__dirname, "..", "extension");
 const manifest = JSON.parse(fs.readFileSync(path.join(root, "manifest.json"), "utf8"));
+const project = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "package.json"), "utf8"));
 
 test("manifest declares the bilingual popup without adding privileges or background pages", () => {
-  assert.equal(manifest.version, "0.3.0");
+  assert.equal(manifest.version, project.version);
   assert.equal(manifest.default_locale, "en");
   assert.equal(manifest.name, "__MSG_extensionName__");
   assert.equal(manifest.description, "__MSG_extensionDescription__");
