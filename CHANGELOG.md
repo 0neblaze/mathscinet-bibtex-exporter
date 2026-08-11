@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.3.0] - 2026-08-12
+
+### Added
+
+- Compact Chrome toolbar popup for `Auto / 中文 / English` language settings.
+- Shared runtime i18n dictionaries with strict key-parity and interpolation tests.
+- Localized extension metadata and custom toolbar icons.
+- Live language synchronization between the popup and open MathSciNet tabs.
+
+### Changed
+
+- Restyled the floating launcher and export panel with MathSciNet-inspired blue, orange, and white visuals.
+- Represented progress, success, recovery, and error states as translatable message keys and parameters.
+- Expanded the reproducible Release ZIP to include popup, locale, i18n, and icon assets.
+
 ## [0.2.0] - 2026-08-12
 
 ### Added

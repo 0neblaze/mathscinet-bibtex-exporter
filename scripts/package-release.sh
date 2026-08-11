@@ -16,21 +16,39 @@ DIST_DIR="$ROOT_DIR/dist"
 ASSET_NAME="mathscinet-bibtex-exporter-v${VERSION}.zip"
 ASSET_PATH="$DIST_DIR/$ASSET_NAME"
 CHECKSUM_PATH="$ASSET_PATH.sha256"
-PACKAGE_FILES=(manifest.json lib.js content.js README.md LICENSE CHANGELOG.md)
+PACKAGE_FILES=(
+  manifest.json
+  i18n.js
+  lib.js
+  content.js
+  popup.html
+  popup.css
+  popup.js
+  _locales/en/messages.json
+  _locales/zh_CN/messages.json
+  icons/icon-16.png
+  icons/icon-32.png
+  icons/icon-48.png
+  icons/icon-128.png
+  README.md
+  LICENSE
+  CHANGELOG.md
+)
 STAGING_DIR="$(mktemp -d "${TMPDIR:-/tmp}/msbe-package.XXXXXX")"
 trap 'rm -rf "$STAGING_DIR"' EXIT
 
 mkdir -p "$DIST_DIR"
 rm -f "$ASSET_PATH" "$CHECKSUM_PATH"
 for file in "${PACKAGE_FILES[@]}"; do
+  mkdir -p "$STAGING_DIR/$(dirname "$file")"
   cp "$ROOT_DIR/$file" "$STAGING_DIR/$file"
 done
-chmod 0644 "$STAGING_DIR"/*
-touch -t 202001010000 "$STAGING_DIR"/*
+find "$STAGING_DIR" -type f -exec chmod 0644 {} +
+find "$STAGING_DIR" -type f -exec touch -t 202001010000 {} +
 
 (
   cd "$STAGING_DIR"
-  zip -X -q "$ASSET_PATH" "${PACKAGE_FILES[@]}"
+  find . -type f -print | LC_ALL=C sort | sed 's#^\./##' | zip -X -q "$ASSET_PATH" -@
 )
 (
   cd "$DIST_DIR"

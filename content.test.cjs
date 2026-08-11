@@ -2,6 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const lib = require("./lib.js");
+const i18n = require("./i18n.js");
 const { createExporter } = require("./content.js");
 
 class FakeElement {
@@ -96,7 +97,8 @@ function option(value, text) {
   return { value, textContent: text, innerText: text };
 }
 
-function createRoot(document, storage) {
+function createRoot(document, storage, { uiLanguage = "en-US" } = {}) {
+  const storageListeners = [];
   const location = {
     assignedUrl: null,
     href: "https://mathscinet.ams.org/mathscinet/publications-search?query=example&page=1&size=100",
@@ -116,8 +118,10 @@ function createRoot(document, storage) {
       }
     },
     MathSciNetExportLib: lib,
+    MathSciNetI18n: i18n,
     URL,
     chrome: {
+      i18n: { getUILanguage: () => uiLanguage },
       storage: {
         local: {
           async get(key) {
@@ -125,6 +129,11 @@ function createRoot(document, storage) {
           },
           async set(value) {
             Object.assign(storage, value);
+          },
+        },
+        onChanged: {
+          addListener(listener) {
+            storageListeners.push(listener);
           },
         },
       },
@@ -138,6 +147,7 @@ function createRoot(document, storage) {
       if (delay >= 30000) timer.unref();
       return timer;
     },
+    __storageListeners: storageListeners,
   };
 }
 
@@ -156,6 +166,7 @@ function createOnePageScenario({
   let exportOpen = initiallyOpen;
   let citationOutput = "";
   const downloads = [];
+  const mountedElements = new Map();
   const storage = sharedStorage || {};
   const exportedCount = citationCount ?? resultCount;
 
@@ -205,14 +216,16 @@ function createOnePageScenario({
     documentElement: {
       append(element) {
         if (element.tagName === "A" && element.download) downloads.push(element.download);
+        if (element.id) mountedElements.set(element.id, element);
+        for (const child of element.childrenById.values()) mountedElements.set(child.id, child);
       },
     },
     createElement(tagName) {
       return new FakeElement(tagName);
     },
     dispatchEvent() {},
-    querySelector() {
-      return null;
+    querySelector(selector) {
+      return selector.startsWith("#") ? mountedElements.get(selector.slice(1)) || null : null;
     },
     querySelectorAll(selector) {
       if (selector === "select") return exportOpen ? [pageSize, citationFormat] : [pageSize];
@@ -361,9 +374,9 @@ function createThreePageScenario({ disableNextOnPage = null, duplicatePagerNext 
   return { downloads, pagerNext, root, secondPagerNext, storage, wrongNext };
 }
 
-function createUiScenario() {
+function createUiScenario({ savedLanguage, uiLanguage = "en-US" } = {}) {
   const elements = new Map();
-  const storage = {};
+  const storage = savedLanguage ? { [i18n.SETTINGS_KEY]: { language: savedLanguage } } : {};
   const document = {
     body: { innerText: "" },
     documentElement: {
@@ -383,8 +396,8 @@ function createUiScenario() {
       return [];
     },
   };
-  const root = createRoot(document, storage);
-  return { document, root };
+  const root = createRoot(document, storage, { uiLanguage });
+  return { document, root, storage };
 }
 
 test("starting an export opens MathSciNet's closed Export controls and collects the visible records", async () => {
@@ -583,4 +596,67 @@ test("the exporter mounts as a collapsed floating button and toggles its panel",
   collapse.click();
   assert.equal(panel.hidden, true);
   assert.equal(launcher.getAttribute("aria-expanded"), "false");
+});
+
+test("the panel follows the browser language by default and restores a manual override", async () => {
+  const automatic = createUiScenario({ uiLanguage: "zh-CN" });
+  await createExporter(automatic.root).initialize();
+  assert.equal(automatic.document.querySelector("#msbe-title").textContent, "MathSciNet 批量导出");
+  assert.equal(automatic.document.querySelector("#msbe-start").textContent, "全部导出");
+  assert.equal(automatic.document.querySelector("#msbe-root").getAttribute("lang"), "zh-CN");
+
+  const manual = createUiScenario({ savedLanguage: "en", uiLanguage: "zh-CN" });
+  await createExporter(manual.root).initialize();
+  assert.equal(manual.document.querySelector("#msbe-title").textContent, "MathSciNet Batch Export");
+  assert.equal(manual.document.querySelector("#msbe-start").textContent, "Export all");
+});
+
+test("changing the language rerenders a completed status without resetting task state", async () => {
+  const scenario = createOnePageScenario();
+  scenario.storage[i18n.SETTINGS_KEY] = { language: "en" };
+  const exporter = createExporter(scenario.root);
+  await exporter.initialize();
+  await exporter.runExport();
+
+  const before = exporter.getState();
+  assert.match(scenario.root.document.querySelector("#msbe-status").textContent, /^Complete:/);
+  for (const listener of scenario.root.__storageListeners) {
+    listener({ [i18n.SETTINGS_KEY]: { newValue: { language: "zh-CN" } } }, "local");
+  }
+
+  const after = exporter.getState();
+  assert.match(scenario.root.document.querySelector("#msbe-status").textContent, /^完成：/);
+  assert.deepEqual(after, before);
+});
+
+test("changing the language rerenders an error with its parameters and preserves partial records", async () => {
+  const scenario = createOnePageScenario({ citationCount: 1, resultCount: 2 });
+  scenario.storage[i18n.SETTINGS_KEY] = { language: "en" };
+  const exporter = createExporter(scenario.root);
+  await exporter.initialize();
+  await exporter.runExport();
+
+  const before = exporter.getState();
+  assert.match(scenario.root.document.querySelector("#msbe-status").textContent, /^Failed:/);
+  assert.equal(before.entries.length, 1);
+  for (const listener of scenario.root.__storageListeners) {
+    listener({ [i18n.SETTINGS_KEY]: { newValue: { language: "zh-CN" } } }, "local");
+  }
+
+  assert.match(scenario.root.document.querySelector("#msbe-status").textContent, /^失败：/);
+  assert.deepEqual(exporter.getState(), before);
+});
+
+test("deleting the language setting returns an open panel to Auto without resetting task state", async () => {
+  const scenario = createUiScenario({ savedLanguage: "en", uiLanguage: "zh-CN" });
+  const exporter = createExporter(scenario.root);
+  await exporter.initialize();
+  const before = exporter.getState();
+
+  for (const listener of scenario.root.__storageListeners) {
+    listener({ [i18n.SETTINGS_KEY]: { oldValue: { language: "en" } } }, "local");
+  }
+
+  assert.equal(scenario.document.querySelector("#msbe-title").textContent, "MathSciNet 批量导出");
+  assert.deepEqual(exporter.getState(), before);
 });

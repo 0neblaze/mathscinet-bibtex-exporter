@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>MathSciNet BibTeX Batch Exporter</title>
+    <link rel="stylesheet" href="popup.css">
+  </head>
+  <body>
+    <main class="card">
+      <header class="brand">
+        <img src="icons/icon-48.png" width="42" height="42" alt="">
+        <div>
+          <h1 id="popup-title">MathSciNet BibTeX Batch Exporter</h1>
+          <p id="popup-version"></p>
+        </div>
+      </header>
+
+      <section class="site-card" aria-live="polite">
+        <span id="popup-site-label" class="eyebrow"></span>
+        <strong id="popup-site-status"></strong>
+      </section>
+
+      <section class="language-card">
+        <h2 id="popup-language-label"></h2>
+        <div id="popup-language-group" class="segmented" role="group">
+          <button type="button" data-language="auto"></button>
+          <button type="button" data-language="zh-CN"></button>
+          <button type="button" data-language="en"></button>
+        </div>
+        <p id="popup-language-hint" class="hint"></p>
+      </section>
+
+      <p id="popup-feedback" class="feedback" role="status" aria-live="polite"></p>
+    </main>
+    <script src="i18n.js"></script>
+    <script src="popup.js"></script>
+  </body>
+</html>

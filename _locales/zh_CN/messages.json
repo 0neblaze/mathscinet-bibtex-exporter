@@ -1,0 +1,8 @@
+{
+  "extensionName": {
+    "message": "MathSciNet BibTeX 批量导出"
+  },
+  "extensionDescription": {
+    "message": "将 MathSciNet 检索结果逐页导出为一个去重后的 BibTeX 文件。"
+  }
+}

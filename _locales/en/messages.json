@@ -1,0 +1,8 @@
+{
+  "extensionName": {
+    "message": "MathSciNet BibTeX Batch Exporter"
+  },
+  "extensionDescription": {
+    "message": "Export every MathSciNet result page into one deduplicated BibTeX file."
+  }
+}

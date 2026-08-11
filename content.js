@@ -8,7 +8,7 @@
   const exporter = factory(root);
   root.__mathSciNetBatchExporterLoaded = true;
   root.MathSciNetBatchExporter = exporter;
-  exporter.mountPanel();
+  exporter.initialize();
 })(typeof globalThis === "object" ? globalThis : this, function createExporter(root) {
   "use strict";
 
@@ -23,6 +23,7 @@
   const navigator = root.navigator;
   const setTimeout = root.setTimeout;
   const URL = root.URL;
+  const i18n = root.MathSciNetI18n;
   const lib = root.MathSciNetExportLib;
   const STORAGE_KEY = "mathscinetBibtexBatchJobV1";
   const PAGE_ADVANCE_RESULT = Object.freeze({
@@ -41,6 +42,37 @@
     pendingPage: null,
     searchIdentity: "",
   };
+  let languageSetting = i18n.DEFAULT_SETTINGS.language;
+  let translator = i18n.createTranslator({
+    language: languageSetting,
+    uiLanguage: chrome.i18n.getUILanguage(),
+  });
+  let currentStatus = { key: "panel.ready", params: {} };
+  let currentStatusKind = "normal";
+  let storageChangeListenerRegistered = false;
+
+  function message(key, params = {}) {
+    return { key, params };
+  }
+
+  function isMessage(value) {
+    return Boolean(value && typeof value === "object" && typeof value.key === "string");
+  }
+
+  function renderMessage(value) {
+    if (!isMessage(value)) return String(value ?? "");
+    const renderedParams = Object.fromEntries(
+      Object.entries(value.params || {}).map(([key, param]) => [key, isMessage(param) ? renderMessage(param) : param]),
+    );
+    return translator.t(value.key, renderedParams);
+  }
+
+  function localizedError(key, params = {}) {
+    const descriptor = message(key, params);
+    const error = new Error(renderMessage(descriptor));
+    error.localizedMessage = descriptor;
+    return error;
+  }
 
   function sleep(milliseconds) {
     return new Promise((resolve) => setTimeout(resolve, milliseconds));
@@ -70,15 +102,15 @@
     );
   }
 
-  async function waitFor(check, description, timeout = 20000, interval = 250) {
+  async function waitFor(check, operation, timeout = 20000, interval = 250) {
     const deadline = Date.now() + timeout;
     while (Date.now() < deadline) {
-      if (state.cancelled) throw new Error("任务已由用户停止");
+      if (state.cancelled) throw localizedError("error.userStopped");
       const value = await check();
       if (value) return value;
       await sleep(interval);
     }
-    throw new Error(`${description}超时`);
+    throw localizedError("error.timeout", { operation });
   }
 
   function findExactControl(labels) {
@@ -140,16 +172,18 @@
     state.jobStatus = status;
   }
 
-  function setStatus(message, kind = "normal") {
+  function setStatus(statusMessage, kind = "normal") {
+    currentStatus = statusMessage;
+    currentStatusKind = kind;
     const status = document.querySelector("#msbe-status");
     if (status) {
-      status.textContent = message;
+      status.textContent = renderMessage(currentStatus);
       status.dataset.kind = kind;
     }
     const launcher = document.querySelector("#msbe-launcher");
     if (launcher) {
       launcher.dataset.kind = kind;
-      launcher.setAttribute("title", `MathSciNet 批量导出：${message}`);
+      launcher.setAttribute("title", translator.t("panel.launcherTitle", { status: renderMessage(currentStatus) }));
     }
   }
 
@@ -164,7 +198,19 @@
 
   function setProgress() {
     const progress = document.querySelector("#msbe-progress");
-    if (progress) progress.textContent = `${state.page}/${state.pages || "?"} 页 · ${state.entries.length} 条`;
+    if (progress) {
+      progress.textContent = translator.t("progress.summary", {
+        page: state.page,
+        pages: state.pages || "?",
+        count: state.entries.length,
+      });
+    }
+    const progressBar = document.querySelector("#msbe-progress-bar");
+    if (progressBar) {
+      const percent = state.pages ? Math.min(100, Math.round((state.page / state.pages) * 100)) : 0;
+      progressBar.style.width = `${percent}%`;
+      progressBar.setAttribute("aria-valuenow", String(percent));
+    }
     const badge = document.querySelector("#msbe-launcher-badge");
     if (badge) {
       badge.hidden = !state.pages;
@@ -175,7 +221,7 @@
 
   function downloadBibtex(partial = false) {
     const result = lib.dedupeBibtex(state.entries);
-    if (!result.entries.length) throw new Error("当前还没有可下载的 BibTeX 记录");
+    if (!result.entries.length) throw localizedError("error.noDownload");
 
     const date = new Date().toISOString().slice(0, 10);
     const suffix = partial ? "_partial" : "";
@@ -274,14 +320,14 @@
   }
 
   async function setPageSizeTo100() {
-    const select = await waitFor(findPageSizeSelect, "等待每页数量选项");
+    const select = await waitFor(findPageSizeSelect, message("operation.waitPageSize"));
     const option = [...select.options].find((candidate) => /\b100\b/.test(`${candidate.value} ${candidate.textContent}`));
-    if (!option) throw new Error("页面数量菜单中没有 100 条选项");
+    if (!option) throw localizedError("error.noPageSize100");
     const expected = Math.min(100, state.total);
     if (select.value === option.value) {
       await waitForRecordSet({
         expectedCount: expected,
-        description: `等待结果列表稳定到 ${expected} 条`,
+        description: message("operation.waitStableResults", { count: expected }),
       });
       return;
     }
@@ -293,7 +339,7 @@
     await waitForRecordSet({
       expectedCount: expected,
       previousSignature: before,
-      description: `等待每页 100 条的结果列表完成刷新`,
+      description: message("operation.waitPageSizeRefresh"),
     });
   }
 
@@ -347,7 +393,7 @@
     const enabledControls = context.controls.filter((control) => !elementIsDisabled(control));
     const namedControls = enabledControls.filter((control) => controlHasExactName(control, labels));
     if (namedControls.length > 1) {
-      throw new Error(`分页器内找到 ${namedControls.length} 个匹配的 ${labels[0]} 控件；为防止误点，任务已停止`);
+      throw localizedError("error.ambiguousNamedControl", { count: namedControls.length, label: labels[0] });
     }
     if (namedControls.length === 1) return namedControls[0];
     if (targetPage === null) return null;
@@ -356,7 +402,7 @@
       (control) => Number(normalizedText(control)) === targetPage,
     );
     if (numberedControls.length > 1) {
-      throw new Error(`分页器内找到 ${numberedControls.length} 个第 ${targetPage} 页控件；为防止误点，任务已停止`);
+      throw localizedError("error.ambiguousNumberedControl", { count: numberedControls.length, page: targetPage });
     }
     return numberedControls[0] || null;
   }
@@ -368,7 +414,7 @@
       (control) => elementIsDisabled(control) && controlHasExactName(control, labels),
     );
     if (matches.length > 1) {
-      throw new Error(`分页器内找到 ${matches.length} 个禁用的 ${labels[0]} 控件；为防止误点，任务已停止`);
+      throw localizedError("error.ambiguousDisabledControl", { count: matches.length, label: labels[0] });
     }
     return matches[0] || null;
   }
@@ -383,20 +429,20 @@
     const current = currentPageNumber();
     if (current === 1) return;
     if (!first || elementIsDisabled(first)) {
-      throw new Error("无法明确验证当前为第 1 页；为防止漏页，任务已停止");
+      throw localizedError("error.cannotVerifyFirstPage");
     }
     const beforeRecords = visibleRecordSignature();
     const pageSizeSelect = findPageSizeSelect();
     const selectedPageSize = Number(pageSizeSelect?.selectedOptions?.[0]?.value || pageSizeSelect?.value);
     if (!Number.isFinite(selectedPageSize) || selectedPageSize < 1) {
-      throw new Error("无法读取当前每页记录数；为防止漏页，任务已停止");
+      throw localizedError("error.cannotReadPageSize");
     }
     first.click();
     await waitForRecordSet({
       expectedCount: Math.min(selectedPageSize, state.total),
       expectedPage: 1,
       previousSignature: beforeRecords,
-      description: "等待第一页文献列表完成刷新",
+      description: message("operation.waitFirstPage"),
     });
   }
 
@@ -408,10 +454,10 @@
   }
 
   async function selectAllRecords() {
-    const checkbox = await waitFor(findSelectAllCheckbox, "等待全选框");
+    const checkbox = await waitFor(findSelectAllCheckbox, message("operation.waitSelectAll"));
     if (!checkbox.checked) {
       checkbox.click();
-      await waitFor(() => checkbox.checked, "全选当前页");
+      await waitFor(() => checkbox.checked, message("operation.selectAll"));
     }
   }
 
@@ -429,14 +475,14 @@
       const label = String(element.getAttribute("aria-label") || "").toLowerCase();
       return text === "export" || label === "export" || /export citations?/.test(label);
     });
-    if (!exportButton) throw new Error("没有找到 MathSciNet 的 Export 按钮");
+    if (!exportButton) throw localizedError("error.exportButtonMissing");
     exportButton.click();
-    await waitFor(findCitationFormatSelect, "打开 Export 菜单");
+    await waitFor(findCitationFormatSelect, message("operation.openExport"));
   }
 
   async function chooseBibtex() {
     await openExportControls();
-    const select = await waitFor(findCitationFormatSelect, "等待引用格式菜单");
+    const select = await waitFor(findCitationFormatSelect, message("operation.waitCitationFormat"));
     const option = [...select.options].find((candidate) => normalizedText(candidate).toLowerCase() === "bibtex");
     select.value = option.value;
     select.dispatchEvent(new Event("input", { bubbles: true }));
@@ -461,7 +507,7 @@
       const value = await navigator.clipboard.readText();
       return lib.extractBibtexFromText(value);
     } catch (error) {
-      throw new Error(`读取剪贴板失败：${error.message}`);
+      throw localizedError("error.clipboardRead", { message: error.message });
     }
   }
 
@@ -478,7 +524,10 @@
 
   async function generateAndExtractBibtex() {
     const before = new Set(bibtexCandidates());
-    const button = await waitFor(() => findExactControl(["get citations"]), "等待 Get Citations 按钮");
+    const button = await waitFor(
+      () => findExactControl(["get citations"]),
+      message("operation.waitGetCitations"),
+    );
     button.click();
 
     let extracted = await waitFor(
@@ -499,13 +548,13 @@
         }
         return "";
       },
-      "等待 MathSciNet 生成 BibTeX",
+      message("operation.waitBibtex"),
       25000,
       400,
     );
 
     extracted = lib.extractBibtexFromText(extracted);
-    if (!extracted) throw new Error("MathSciNet 已响应，但没有识别到 BibTeX 文本");
+    if (!extracted) throw localizedError("error.noBibtex");
     await closeCitationOutput();
     return extracted;
   }
@@ -515,7 +564,10 @@
     const requestedPage = requestedPageNumber();
     const beforePage = requestedPage === processedPage ? processedPage : displayedPage;
     if (beforePage === null || beforePage !== processedPage) {
-      throw new Error(`翻页前页码校验失败：刚处理第 ${processedPage} 页，页面显示第 ${displayedPage ?? "?"} 页`);
+      throw localizedError("error.beforePageMismatch", {
+        processed: processedPage,
+        displayed: displayedPage ?? "?",
+      });
     }
     const next = findPaginationControl(["next", "next page", "go to next page"], beforePage + 1);
     if (!next || elementIsDisabled(next)) {
@@ -536,11 +588,11 @@
       expectedCount,
       expectedPage: beforePage + 1,
       previousSignature: beforeRecords,
-      description: `等待第 ${beforePage + 1} 页文献列表完成刷新`,
+      description: message("operation.waitPageRefresh", { page: beforePage + 1 }),
     });
     const afterPage = currentPageNumber();
     if (afterPage !== beforePage + 1) {
-      throw new Error(`翻页校验失败：预期第 ${beforePage + 1} 页，实际第 ${afterPage} 页`);
+      throw localizedError("error.afterPageMismatch", { expected: beforePage + 1, actual: afterPage });
     }
     await sleep(600);
     return PAGE_ADVANCE_RESULT.advanced;
@@ -571,7 +623,7 @@
     try {
       state.total = await waitFor(
         () => lib.parseResultCount(document.body.innerText || ""),
-        "等待 MathSciNet 搜索结果总数",
+        message("operation.waitResultTotal"),
         30000,
         250,
       );
@@ -581,14 +633,14 @@
       if (resumingPendingPage) {
         startPage = pendingPage;
         const expectedCount = Math.min(100, state.total - (startPage - 1) * 100);
-        setStatus(`正在恢复第 ${startPage}/${state.pages} 页…`);
+        setStatus(message("status.recoveringPage", { page: startPage, pages: state.pages }));
         await waitForRecordSet({
           expectedCount,
           expectedRequestedPage: startPage,
-          description: `等待直接访问的第 ${startPage} 页文献列表稳定到 ${expectedCount} 条`,
+          description: message("operation.waitDirectPage", { page: startPage, count: expectedCount }),
         });
       } else {
-        setStatus(`识别到 ${state.total} 条结果，正在切换到每页 100 条…`);
+        setStatus(message("status.detectedTotal", { total: state.total }));
         await goToFirstPage();
         await setPageSizeTo100();
       }
@@ -596,7 +648,7 @@
       for (let page = startPage; page <= state.pages; page += 1) {
         state.page = page;
         setProgress();
-        setStatus(`正在处理第 ${page}/${state.pages} 页…`);
+        setStatus(message("status.processingPage", { page, pages: state.pages }));
 
         await openExportControls();
         await selectAllRecords();
@@ -608,9 +660,11 @@
         if (resumingPendingPage && page === pendingPage) {
           const expectedCumulativeCount = Math.min(state.total, page * 100);
           if (state.entries.length !== expectedCumulativeCount) {
-            throw new Error(
-              `待续页累计数量校验失败：处理第 ${page} 页后预期 ${expectedCumulativeCount} 条，实际 ${state.entries.length} 条`,
-            );
+            throw localizedError("error.resumeCountMismatch", {
+              page,
+              expected: expectedCumulativeCount,
+              actual: state.entries.length,
+            });
           }
           state.pendingPage = null;
         }
@@ -621,29 +675,35 @@
           const advanceResult = await goToNextPage(page);
           if (advanceResult === PAGE_ADVANCE_RESULT.navigating) return;
           if (advanceResult === PAGE_ADVANCE_RESULT.unavailable) {
-            throw new Error(`第 ${page} 页处理完毕，但没有找到可用的 Next 按钮`);
+            throw localizedError("error.nextMissing", { page });
           }
         }
       }
 
       if (state.entries.length !== state.total) {
-        throw new Error(`导出数量校验失败：页面显示 ${state.total} 条，实际收集 ${state.entries.length} 条`);
+        throw localizedError("error.totalCountMismatch", {
+          expected: state.total,
+          actual: state.entries.length,
+        });
       }
       const download = downloadBibtex(false);
       await saveProgress("complete");
-      setStatus(`完成：${download.count} 条，已下载 ${download.filename}`, "success");
+      setStatus(message("status.complete", { count: download.count, filename: download.filename }), "success");
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const errorMessage = error?.localizedMessage || (error instanceof Error ? error.message : String(error));
       const terminalStatus = state.cancelled ? "cancelled" : "error";
       state.jobStatus = terminalStatus;
       let persistenceMessage = "";
       try {
         await saveProgress(terminalStatus);
       } catch (storageError) {
-        persistenceMessage = `；另有进度保存错误：${storageError.message}`;
+        persistenceMessage = message("status.persistenceError", { message: storageError.message });
       }
       setStatus(
-        `${state.cancelled ? "已停止" : "失败"}：${message}${persistenceMessage}。可下载内存中已收集结果。`,
+        message(state.cancelled ? "status.cancelled" : "status.failed", {
+          message: errorMessage,
+          persistence: persistenceMessage,
+        }),
         "error",
       );
     } finally {
@@ -665,59 +725,123 @@
     state.pendingPage = Number(job.pendingPage) || null;
     state.searchIdentity = job.searchIdentity || searchIdentity();
     setProgress();
-    setStatus(`发现上次未完成任务：已保留 ${state.entries.length} 条，可先下载部分结果。`, "warning");
+    setStatus(message("status.restoreFound", { count: state.entries.length }), "warning");
     return job;
   }
 
+  function renderPanel() {
+    translator = i18n.createTranslator({
+      language: languageSetting,
+      uiLanguage: chrome.i18n.getUILanguage(),
+    });
+    const panel = document.querySelector("#msbe-panel");
+    if (!panel) return;
+    document.querySelector("#msbe-root").setAttribute("lang", translator.language);
+
+    document.querySelector("#msbe-title").textContent = translator.t("panel.title");
+    document.querySelector("#msbe-start").textContent = translator.t("panel.exportAll");
+    document.querySelector("#msbe-stop").textContent = translator.t("panel.stop");
+    document.querySelector("#msbe-partial").textContent = translator.t("panel.downloadCollected");
+    const collapse = document.querySelector("#msbe-collapse");
+    collapse.setAttribute("aria-label", translator.t("panel.ariaCollapse"));
+    collapse.setAttribute("title", translator.t("panel.collapse"));
+    const launcher = document.querySelector("#msbe-launcher");
+    launcher.setAttribute("aria-label", translator.t(panel.hidden ? "panel.ariaExpand" : "panel.ariaCollapse"));
+    document.querySelector("#msbe-progress-bar").setAttribute("aria-label", translator.t("panel.ariaProgress"));
+    setStatus(currentStatus, currentStatusKind);
+    setProgress();
+  }
+
+  function registerLanguageListener() {
+    if (storageChangeListenerRegistered) return;
+    chrome.storage.onChanged.addListener((changes, areaName) => {
+      if (areaName !== "local" || !Object.prototype.hasOwnProperty.call(changes, i18n.SETTINGS_KEY)) return;
+      languageSetting = i18n.normalizeLanguageSetting(changes[i18n.SETTINGS_KEY].newValue?.language);
+      renderPanel();
+    });
+    storageChangeListenerRegistered = true;
+  }
+
+  async function initialize() {
+    let settingError = null;
+    try {
+      const stored = await chrome.storage.local.get(i18n.SETTINGS_KEY);
+      languageSetting = i18n.normalizeLanguageSetting(stored[i18n.SETTINGS_KEY]?.language);
+    } catch (error) {
+      settingError = error;
+    }
+    registerLanguageListener();
+    const restorePromise = mountPanel();
+    if (settingError) {
+      setStatus(message("status.settingReadFailed", { message: settingError.message }), "error");
+    }
+    return restorePromise;
+  }
+
   function mountPanel() {
-    if (document.querySelector("#msbe-root")) return;
+    if (document.querySelector("#msbe-root")) {
+      renderPanel();
+      return Promise.resolve(null);
+    }
     const rootElement = document.createElement("aside");
     rootElement.id = "msbe-root";
     rootElement.innerHTML = `
       <style>
         #msbe-root,#msbe-root *{box-sizing:border-box}
-        #msbe-launcher{position:fixed;right:18px;bottom:18px;z-index:2147483647;width:48px;height:48px;border:0;border-radius:50%;background:#6750a4;color:#fff;box-shadow:0 6px 20px rgba(0,0,0,.28);cursor:pointer;font:700 20px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
-        #msbe-launcher:hover{background:#57408f} #msbe-launcher:focus-visible{outline:3px solid #b9a7ee;outline-offset:3px}
-        #msbe-launcher[data-kind="success"]{background:#167744} #msbe-launcher[data-kind="error"]{background:#b42318} #msbe-launcher[data-kind="warning"]{background:#9a6700}
-        #msbe-launcher-badge{position:absolute;right:-8px;top:-7px;min-width:27px;padding:3px 5px;border:2px solid #fff;border-radius:12px;background:#24242a;color:#fff;font:600 10px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-variant-numeric:tabular-nums}
+        #msbe-launcher{position:fixed;right:18px;bottom:18px;z-index:2147483647;width:48px;height:48px;border:2px solid #fff;border-radius:50%;background:#0b4f9c;color:#fff;box-shadow:0 7px 22px rgba(11,79,156,.32),0 2px 7px rgba(23,50,77,.22);cursor:pointer;font:700 16px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;transition:transform .16s ease,background .16s ease,box-shadow .16s ease}
+        #msbe-launcher:hover{background:#083f7d;transform:translateY(-2px);box-shadow:0 9px 25px rgba(11,79,156,.38),0 3px 8px rgba(23,50,77,.2)} #msbe-launcher:focus-visible{outline:3px solid rgba(237,107,36,.55);outline-offset:3px}
+        #msbe-launcher[data-kind="success"]{background:#167744} #msbe-launcher[data-kind="error"]{background:#b42318} #msbe-launcher[data-kind="warning"]{background:#a15c00}
+        #msbe-launcher-mark{display:inline-flex;align-items:baseline;gap:1px;letter-spacing:-1px} #msbe-launcher-mark strong{color:#fff;font-size:17px} #msbe-launcher-mark i{color:#ffb176;font:800 14px/1 sans-serif}
+        #msbe-launcher-badge{position:absolute;right:-8px;top:-7px;min-width:27px;padding:3px 5px;border:2px solid #fff;border-radius:12px;background:#ed6b24;color:#fff;font:700 10px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-variant-numeric:tabular-nums;box-shadow:0 2px 6px rgba(23,50,77,.22)}
         #msbe-launcher-badge[hidden],#msbe-panel[hidden]{display:none!important}
-        #msbe-panel{position:fixed;right:18px;bottom:78px;z-index:2147483647;width:min(330px,calc(100vw - 36px));max-height:calc(100vh - 110px);overflow:auto;padding:14px;border:1px solid #c8c8d0;border-radius:12px;background:#fff;color:#24242a;box-shadow:0 8px 28px rgba(0,0,0,.22);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
-        #msbe-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 8px}
-        #msbe-panel h2{margin:0;font-size:16px}
-        #msbe-collapse{width:28px;height:28px;border:0;border-radius:6px;background:transparent;color:#5d5d68;cursor:pointer;font-size:21px;line-height:1}
-        #msbe-collapse:hover{background:#f0eef6;color:#24242a}
-        #msbe-status{min-height:42px;margin:0 0 8px;overflow-wrap:anywhere}
-        #msbe-status[data-kind="success"]{color:#0b6b32} #msbe-status[data-kind="error"]{color:#b42318} #msbe-status[data-kind="warning"]{color:#8a5800}
-        #msbe-progress{margin:0 0 10px;color:#5d5d68;font-variant-numeric:tabular-nums}
-        #msbe-actions{display:flex;gap:7px;flex-wrap:wrap}
-        #msbe-actions button{border:1px solid #6750a4;border-radius:7px;padding:7px 10px;background:#6750a4;color:#fff;cursor:pointer}
-        #msbe-actions button:nth-child(n+2){background:#fff;color:#4d3c7d}
+        #msbe-panel{position:fixed;right:18px;bottom:78px;z-index:2147483647;width:min(336px,calc(100vw - 36px));max-height:calc(100vh - 110px);overflow:auto;padding:0;border:1px solid #c8d5e2;border-radius:13px;background:#fff;color:#17324d;box-shadow:0 12px 34px rgba(23,50,77,.22);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+        #msbe-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0;padding:13px 14px 10px;border-bottom:3px solid #ed6b24;background:linear-gradient(135deg,#0b4f9c,#0a417f);color:#fff}
+        #msbe-panel h2{margin:0;font-size:16px;line-height:1.25;letter-spacing:-.01em}
+        #msbe-collapse{flex:0 0 auto;width:28px;height:28px;border:1px solid rgba(255,255,255,.32);border-radius:7px;background:rgba(255,255,255,.1);color:#fff;cursor:pointer;font-size:21px;line-height:1}
+        #msbe-collapse:hover{background:rgba(255,255,255,.2)} #msbe-collapse:focus-visible{outline:3px solid rgba(255,177,118,.7);outline-offset:2px}
+        #msbe-body{padding:13px 14px 14px}
+        #msbe-status{min-height:42px;margin:0 0 9px;overflow-wrap:anywhere;color:#294963}
+        #msbe-status[data-kind="success"]{color:#0e6b3e} #msbe-status[data-kind="error"]{color:#b42318} #msbe-status[data-kind="warning"]{color:#8a5200}
+        #msbe-progress-row{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 7px}
+        #msbe-progress{margin:0;color:#526a81;font-size:12px;font-weight:650;font-variant-numeric:tabular-nums}
+        #msbe-progress-track{height:6px;margin:0 0 12px;overflow:hidden;border-radius:99px;background:#e5edf5}
+        #msbe-progress-bar{width:0;height:100%;border-radius:inherit;background:linear-gradient(90deg,#0b4f9c 0%,#1769b5 72%,#ed6b24 100%);transition:width .2s ease}
+        #msbe-actions{display:grid;grid-template-columns:1fr auto;gap:7px}
+        #msbe-actions button{min-height:35px;border:1px solid #0b4f9c;border-radius:8px;padding:7px 10px;background:#0b4f9c;color:#fff;cursor:pointer;font-weight:650;line-height:1.2}
+        #msbe-actions button:hover:not(:disabled){background:#083f7d} #msbe-actions button:focus-visible{outline:3px solid rgba(237,107,36,.42);outline-offset:2px}
+        #msbe-actions button:nth-child(n+2){background:#fff;color:#0b4f9c}
+        #msbe-actions button:nth-child(n+2):hover:not(:disabled){background:#eef5fb}
+        #msbe-partial{grid-column:1/-1}
         #msbe-actions button:disabled{cursor:not-allowed;opacity:.45}
       </style>
-      <button id="msbe-launcher" type="button" aria-controls="msbe-panel" aria-expanded="false" aria-label="展开 MathSciNet 批量导出" title="MathSciNet 批量导出">
-        <span aria-hidden="true">↓</span><span id="msbe-launcher-badge" hidden></span>
+      <button id="msbe-launcher" type="button" aria-controls="msbe-panel" aria-expanded="false">
+        <span id="msbe-launcher-mark" aria-hidden="true"><strong>B</strong><i>↓</i></span><span id="msbe-launcher-badge" hidden></span>
       </button>
       <section id="msbe-panel" hidden aria-labelledby="msbe-title">
         <div id="msbe-heading">
-          <h2 id="msbe-title">MathSciNet 批量导出</h2>
-          <button id="msbe-collapse" type="button" aria-label="收起导出面板" title="收起">×</button>
+          <h2 id="msbe-title"></h2>
+          <button id="msbe-collapse" type="button">×</button>
         </div>
-        <p id="msbe-status">准备就绪。停留在搜索结果页后点击“全部导出”。</p>
-        <p id="msbe-progress">0/? 页 · 0 条</p>
-        <div id="msbe-actions">
-          <button id="msbe-start" type="button">全部导出</button>
-          <button id="msbe-stop" type="button" disabled>停止</button>
-          <button id="msbe-partial" type="button" disabled>下载已收集</button>
+        <div id="msbe-body">
+          <p id="msbe-status" role="status" aria-live="polite"></p>
+          <div id="msbe-progress-row"><p id="msbe-progress"></p></div>
+          <div id="msbe-progress-track"><div id="msbe-progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div></div>
+          <div id="msbe-actions">
+            <button id="msbe-start" type="button"></button>
+            <button id="msbe-stop" type="button" disabled></button>
+            <button id="msbe-partial" type="button" disabled></button>
+          </div>
         </div>
       </section>`;
     document.documentElement.append(rootElement);
+    renderPanel();
 
     const launcher = rootElement.querySelector("#msbe-launcher");
     const panel = rootElement.querySelector("#msbe-panel");
     const setPanelExpanded = (expanded) => {
       panel.hidden = !expanded;
       launcher.setAttribute("aria-expanded", String(expanded));
-      launcher.setAttribute("aria-label", `${expanded ? "收起" : "展开"} MathSciNet 批量导出`);
+      launcher.setAttribute("aria-label", translator.t(expanded ? "panel.ariaCollapse" : "panel.ariaExpand"));
     };
     launcher.addEventListener("click", () => {
       setPanelExpanded(panel.hidden);
@@ -727,18 +851,18 @@
     rootElement.querySelector("#msbe-start").addEventListener("click", () => runExport());
     rootElement.querySelector("#msbe-stop").addEventListener("click", () => {
       state.cancelled = true;
-      setStatus("正在停止；已收集内容不会丢失…", "warning");
+      setStatus(message("status.stopping"), "warning");
     });
     rootElement.querySelector("#msbe-partial").addEventListener("click", () => {
       try {
         const download = downloadBibtex(true);
-        setStatus(`已下载部分结果：${download.count} 条`, "warning");
+        setStatus(message("status.partialDownloaded", { count: download.count }), "warning");
       } catch (error) {
-        setStatus(error.message, "error");
+        setStatus(error.localizedMessage || error.message, "error");
       }
     });
 
-    restoreProgress()
+    return restoreProgress()
       .then((job) => {
         if (
           job &&
@@ -749,11 +873,12 @@
           runExport({ resumeFromNavigation: true });
         }
       })
-      .catch((error) => setStatus(`读取上次进度失败：${error.message}`, "error"));
+      .catch((error) => setStatus(message("status.restoreReadFailed", { message: error.message }), "error"));
   }
 
   return {
     getState: () => ({ ...state, entries: [...state.entries] }),
+    initialize,
     mountPanel,
     runExport,
   };
