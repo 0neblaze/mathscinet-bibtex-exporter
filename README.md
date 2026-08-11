@@ -2,14 +2,14 @@
   <img src="extension/icons/icon-128.png" width="96" height="96" alt="MathSciNet BibTeX Batch Exporter icon">
   <h1>MathSciNet BibTeX Batch Exporter</h1>
   <p>A bilingual Chrome extension for reliable, resumable bulk export of MathSciNet search results.</p>
+  <p><strong>English</strong> | <a href="README.zh-CN.md">简体中文</a></p>
+  <p>
+    <a href="https://github.com/0neblaze/mathscinet-bibtex-exporter/releases/latest"><img alt="Latest Release" src="https://img.shields.io/github/v/release/0neblaze/mathscinet-bibtex-exporter?display_name=tag&amp;sort=semver"></a>
+    <a href="https://github.com/0neblaze/mathscinet-bibtex-exporter/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/0neblaze/mathscinet-bibtex-exporter/actions/workflows/ci.yml/badge.svg"></a>
+    <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-0b4f9c.svg"></a>
+    <img alt="Chrome Manifest V3" src="https://img.shields.io/badge/Chrome-Manifest%20V3-ed6b24">
+  </p>
 </div>
-
-English | [简体中文](README.zh-CN.md)
-
-[![Latest Release](https://img.shields.io/github/v/release/0neblaze/mathscinet-bibtex-exporter?display_name=tag&sort=semver)](https://github.com/0neblaze/mathscinet-bibtex-exporter/releases/latest)
-[![CI](https://github.com/0neblaze/mathscinet-bibtex-exporter/actions/workflows/ci.yml/badge.svg)](https://github.com/0neblaze/mathscinet-bibtex-exporter/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-0b4f9c.svg)](LICENSE)
-![Chrome Manifest V3](https://img.shields.io/badge/Chrome-Manifest%20V3-ed6b24)
 
 ## Why this extension?
 

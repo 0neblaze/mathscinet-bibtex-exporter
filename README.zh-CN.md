@@ -2,14 +2,14 @@
   <img src="extension/icons/icon-128.png" width="96" height="96" alt="MathSciNet BibTeX 批量导出图标">
   <h1>MathSciNet BibTeX 批量导出</h1>
   <p>可靠、可恢复、支持中英双语的 MathSciNet Chrome 批量导出扩展。</p>
+  <p><a href="README.md">English</a> | <strong>简体中文</strong></p>
+  <p>
+    <a href="https://github.com/0neblaze/mathscinet-bibtex-exporter/releases/latest"><img alt="最新版本" src="https://img.shields.io/github/v/release/0neblaze/mathscinet-bibtex-exporter?display_name=tag&amp;sort=semver"></a>
+    <a href="https://github.com/0neblaze/mathscinet-bibtex-exporter/actions/workflows/ci.yml"><img alt="持续集成" src="https://github.com/0neblaze/mathscinet-bibtex-exporter/actions/workflows/ci.yml/badge.svg"></a>
+    <a href="LICENSE"><img alt="MIT 许可证" src="https://img.shields.io/badge/License-MIT-0b4f9c.svg"></a>
+    <img alt="Chrome Manifest V3" src="https://img.shields.io/badge/Chrome-Manifest%20V3-ed6b24">
+  </p>
 </div>
-
-[English](README.md) | 简体中文
-
-[![最新版本](https://img.shields.io/github/v/release/0neblaze/mathscinet-bibtex-exporter?display_name=tag&sort=semver)](https://github.com/0neblaze/mathscinet-bibtex-exporter/releases/latest)
-[![持续集成](https://github.com/0neblaze/mathscinet-bibtex-exporter/actions/workflows/ci.yml/badge.svg)](https://github.com/0neblaze/mathscinet-bibtex-exporter/actions/workflows/ci.yml)
-[![MIT 许可证](https://img.shields.io/badge/License-MIT-0b4f9c.svg)](LICENSE)
-![Chrome Manifest V3](https://img.shields.io/badge/Chrome-Manifest%20V3-ed6b24)
 
 ## 为什么需要这个扩展？
 
