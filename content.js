@@ -1,11 +1,35 @@
-(function startMathSciNetExporter() {
+(function exposeMathSciNetExporter(root, factory) {
+  if (typeof module === "object" && module.exports) {
+    module.exports = { createExporter: factory };
+    return;
+  }
+
+  if (root.__mathSciNetBatchExporterLoaded) return;
+  const exporter = factory(root);
+  root.__mathSciNetBatchExporterLoaded = true;
+  root.MathSciNetBatchExporter = exporter;
+  exporter.mountPanel();
+})(typeof globalThis === "object" ? globalThis : this, function createExporter(root) {
   "use strict";
 
-  if (globalThis.__mathSciNetBatchExporterLoaded) return;
-  globalThis.__mathSciNetBatchExporterLoaded = true;
-
-  const lib = globalThis.MathSciNetExportLib;
+  const Blob = root.Blob;
+  const chrome = root.chrome;
+  const document = root.document;
+  const Element = root.Element;
+  const Event = root.Event;
+  const getComputedStyle = root.getComputedStyle;
+  const KeyboardEvent = root.KeyboardEvent;
+  const location = root.location;
+  const navigator = root.navigator;
+  const setTimeout = root.setTimeout;
+  const URL = root.URL;
+  const lib = root.MathSciNetExportLib;
   const STORAGE_KEY = "mathscinetBibtexBatchJobV1";
+  const PAGE_ADVANCE_RESULT = Object.freeze({
+    advanced: "advanced",
+    navigating: "navigating",
+    unavailable: "unavailable",
+  });
   const state = {
     running: false,
     cancelled: false,
@@ -14,6 +38,7 @@
     pages: 0,
     total: 0,
     jobStatus: "idle",
+    pendingPage: null,
     searchIdentity: "",
   };
 
@@ -56,17 +81,20 @@
     throw new Error(`${description}超时`);
   }
 
-  function findControl(labels, selector = "button, [role='button'], [role='menuitem'], a") {
+  function findExactControl(labels) {
+    return visibleElements("button, [role='button'], [role='menuitem'], a").find(
+      (element) => !elementIsDisabled(element) && controlHasExactName(element, labels),
+    );
+  }
+
+  function controlHasExactName(element, labels) {
     const wanted = labels.map((label) => label.toLowerCase());
-    return visibleElements(selector).find((element) => {
-      if (elementIsDisabled(element)) return false;
-      const values = [
-        normalizedText(element),
-        element.getAttribute("aria-label") || "",
-        element.getAttribute("title") || "",
-      ].map((value) => value.toLowerCase());
-      return values.some((value) => wanted.some((label) => value === label || value.includes(label)));
-    });
+    const values = [
+      normalizedText(element),
+      element.getAttribute("aria-label") || "",
+      element.getAttribute("title") || "",
+    ].map((value) => value.replace(/\s+/g, " ").trim().toLowerCase());
+    return values.some((value) => wanted.includes(value));
   }
 
   function resultFingerprint() {
@@ -83,10 +111,15 @@
   function searchIdentity(rawUrl = location.href) {
     const url = new URL(rawUrl, location.href);
     for (const key of [...url.searchParams.keys()]) {
-      if (/^(page|pagenumber|start|offset)$/i.test(key)) url.searchParams.delete(key);
+      if (/^(page|pagenumber|start|offset|size)$/i.test(key)) url.searchParams.delete(key);
     }
     url.hash = "";
     return url.toString();
+  }
+
+  function requestedPageNumber(rawUrl = location.href) {
+    const page = Number(new URL(rawUrl, location.href).searchParams.get("page"));
+    return Number.isInteger(page) && page > 0 ? page : null;
   }
 
   async function saveProgress(status = "running") {
@@ -98,6 +131,7 @@
         entries: state.entries,
         page: state.page,
         pages: state.pages,
+        pendingPage: state.pendingPage,
         total: state.total,
         searchIdentity: state.searchIdentity,
         updatedAt: new Date().toISOString(),
@@ -108,9 +142,15 @@
 
   function setStatus(message, kind = "normal") {
     const status = document.querySelector("#msbe-status");
-    if (!status) return;
-    status.textContent = message;
-    status.dataset.kind = kind;
+    if (status) {
+      status.textContent = message;
+      status.dataset.kind = kind;
+    }
+    const launcher = document.querySelector("#msbe-launcher");
+    if (launcher) {
+      launcher.dataset.kind = kind;
+      launcher.setAttribute("title", `MathSciNet 批量导出：${message}`);
+    }
   }
 
   function setButtons() {
@@ -124,8 +164,12 @@
 
   function setProgress() {
     const progress = document.querySelector("#msbe-progress");
-    if (!progress) return;
-    progress.textContent = `${state.page}/${state.pages || "?"} 页 · ${state.entries.length} 条`;
+    if (progress) progress.textContent = `${state.page}/${state.pages || "?"} 页 · ${state.entries.length} 条`;
+    const badge = document.querySelector("#msbe-launcher-badge");
+    if (badge) {
+      badge.hidden = !state.pages;
+      badge.textContent = state.pages ? `${state.page}/${state.pages}` : "";
+    }
     setButtons();
   }
 
@@ -158,6 +202,16 @@
   }
 
   function visibleMathSciNetRecordIds() {
+    const linkedIds = visibleElements("a")
+      .flatMap((link) => {
+        const textMatch = normalizedText(link).match(/^MR\s?(\d{5,})$/);
+        const href = link.getAttribute("href") || "";
+        if (!textMatch || link.classList.contains("refmr") || !href.startsWith("/mathscinet/article?")) return [];
+        const target = new URL(href, location.href);
+        return target.searchParams.get("mr") === textMatch[1] ? [textMatch[1]] : [];
+      });
+    if (linkedIds.length) return [...new Set(linkedIds)].sort();
+
     const ids = [];
     for (const checkbox of visibleElements("input[type='checkbox']")) {
       const label = `${checkbox.title || ""} ${checkbox.getAttribute("aria-label") || ""}`;
@@ -185,6 +239,7 @@
   async function waitForRecordSet({
     expectedCount,
     expectedPage = null,
+    expectedRequestedPage = null,
     previousSignature = "",
     description,
   }) {
@@ -198,7 +253,8 @@
           ids.length !== expectedCount ||
           !signature ||
           signature === previousSignature ||
-          (expectedPage !== null && currentPageNumber() !== expectedPage)
+          (expectedPage !== null && currentPageNumber() !== expectedPage) ||
+          (expectedRequestedPage !== null && requestedPageNumber() !== expectedRequestedPage)
         ) {
           lastSignature = "";
           stableSamples = 0;
@@ -241,9 +297,9 @@
     });
   }
 
-  function currentPageNumber() {
+  function currentPageControl() {
     const current = visibleElements("[aria-current]").find((element) => /^\d+$/.test(normalizedText(element)));
-    if (current) return Number(normalizedText(current));
+    if (current) return current;
 
     const selected = visibleElements(
       "button, [role='button'], [role='menuitem'], a, li, [class*='page']",
@@ -251,15 +307,74 @@
       const marker = `${String(element.className || "")} ${element.getAttribute("aria-selected") || ""}`;
       return /^\d+$/.test(normalizedText(element)) && /(active|current|selected|true)/i.test(marker);
     });
-    return selected ? Number(normalizedText(selected)) : null;
+    if (!selected) return null;
+
+    const tagName = String(selected.tagName || "").toLowerCase();
+    if (tagName === "button" || tagName === "a" || selected.getAttribute("role") === "button") return selected;
+    if (typeof selected.querySelector !== "function") return selected;
+    const nestedControl = selected.querySelector("button, [role='button'], a");
+    return nestedControl && isVisible(nestedControl) && /^\d+$/.test(normalizedText(nestedControl))
+      ? nestedControl
+      : selected;
+  }
+
+  function currentPageNumber() {
+    const control = currentPageControl();
+    return control ? Number(normalizedText(control)) : null;
+  }
+
+  function paginationContext() {
+    const current = currentPageControl();
+    if (!current) return null;
+    const selector = "button, [role='button'], [role='menuitem'], a";
+    for (let container = current.parentElement; container; container = container.parentElement) {
+      if (typeof container.querySelectorAll !== "function") continue;
+      const controls = [...container.querySelectorAll(selector)].filter(isVisible);
+      if (!controls.includes(current)) continue;
+      const hasForwardControl = controls.some(
+        (control) =>
+          controlHasExactName(control, ["next", "next page", "go to next page"]) ||
+          Number(normalizedText(control)) === Number(normalizedText(current)) + 1,
+      );
+      if (hasForwardControl) return { container, controls, current };
+    }
+    return null;
+  }
+
+  function findPaginationControl(labels, targetPage = null) {
+    const context = paginationContext();
+    if (!context) return null;
+    const enabledControls = context.controls.filter((control) => !elementIsDisabled(control));
+    const namedControls = enabledControls.filter((control) => controlHasExactName(control, labels));
+    if (namedControls.length > 1) {
+      throw new Error(`分页器内找到 ${namedControls.length} 个匹配的 ${labels[0]} 控件；为防止误点，任务已停止`);
+    }
+    if (namedControls.length === 1) return namedControls[0];
+    if (targetPage === null) return null;
+
+    const numberedControls = enabledControls.filter(
+      (control) => Number(normalizedText(control)) === targetPage,
+    );
+    if (numberedControls.length > 1) {
+      throw new Error(`分页器内找到 ${numberedControls.length} 个第 ${targetPage} 页控件；为防止误点，任务已停止`);
+    }
+    return numberedControls[0] || null;
+  }
+
+  function findDisabledPaginationControl(labels) {
+    const context = paginationContext();
+    if (!context) return null;
+    const matches = context.controls.filter(
+      (control) => elementIsDisabled(control) && controlHasExactName(control, labels),
+    );
+    if (matches.length > 1) {
+      throw new Error(`分页器内找到 ${matches.length} 个禁用的 ${labels[0]} 控件；为防止误点，任务已停止`);
+    }
+    return matches[0] || null;
   }
 
   function findFirstPageControl() {
-    return visibleElements("button, [role='button'], [role='menuitem'], a").find((element) => {
-      const text = normalizedText(element).toLowerCase();
-      const label = String(element.getAttribute("aria-label") || "").toLowerCase();
-      return text === "first" || label.includes("go to first page");
-    });
+    return findPaginationControl(["first", "first page", "go to first page"], 1);
   }
 
   async function goToFirstPage() {
@@ -351,7 +466,7 @@
   }
 
   async function closeCitationOutput() {
-    const close = findControl(["close", "done", "back to results", "cancel"]);
+    const close = findExactControl(["close", "done", "back to results", "cancel"]);
     if (close) {
       close.click();
       await sleep(350);
@@ -363,7 +478,7 @@
 
   async function generateAndExtractBibtex() {
     const before = new Set(bibtexCandidates());
-    const button = await waitFor(() => findControl(["get citations"]), "等待 Get Citations 按钮");
+    const button = await waitFor(() => findExactControl(["get citations"]), "等待 Get Citations 按钮");
     button.click();
 
     let extracted = await waitFor(
@@ -371,7 +486,12 @@
         const fresh = bibtexCandidates().find((candidate) => !before.has(candidate));
         if (fresh) return fresh;
 
-        const copy = findControl(["copy", "copy citations", "copy to clipboard"]);
+        const copy = findExactControl([
+          "copy",
+          "copy citations",
+          "copy citations to clipboard",
+          "copy to clipboard",
+        ]);
         if (copy) {
           copy.click();
           await sleep(200);
@@ -390,11 +510,25 @@
     return extracted;
   }
 
-  async function goToNextPage() {
-    const next = findControl(["go to next page", "next"]);
-    if (!next || elementIsDisabled(next)) return false;
-    const beforePage = currentPageNumber();
-    if (beforePage === null) throw new Error("无法读取当前页码；为防止重复或漏页，任务已停止");
+  async function goToNextPage(processedPage) {
+    const displayedPage = currentPageNumber();
+    const requestedPage = requestedPageNumber();
+    const beforePage = requestedPage === processedPage ? processedPage : displayedPage;
+    if (beforePage === null || beforePage !== processedPage) {
+      throw new Error(`翻页前页码校验失败：刚处理第 ${processedPage} 页，页面显示第 ${displayedPage ?? "?"} 页`);
+    }
+    const next = findPaginationControl(["next", "next page", "go to next page"], beforePage + 1);
+    if (!next || elementIsDisabled(next)) {
+      const disabledNext = findDisabledPaginationControl(["next", "next page", "go to next page"]);
+      if (!disabledNext || beforePage >= state.pages) return PAGE_ADVANCE_RESULT.unavailable;
+      state.pendingPage = beforePage + 1;
+      await saveProgress("running");
+      const target = new URL(location.href);
+      target.searchParams.set("page", String(state.pendingPage));
+      target.searchParams.set("size", "100");
+      location.assign(target.toString());
+      return PAGE_ADVANCE_RESULT.navigating;
+    }
     const beforeRecords = visibleRecordSignature();
     next.click();
     const expectedCount = Math.min(100, Math.max(1, state.total - beforePage * 100));
@@ -409,10 +543,10 @@
       throw new Error(`翻页校验失败：预期第 ${beforePage + 1} 页，实际第 ${afterPage} 页`);
     }
     await sleep(600);
-    return true;
+    return PAGE_ADVANCE_RESULT.advanced;
   }
 
-  async function runExport() {
+  async function runExport({ resumeFromNavigation = false } = {}) {
     if (state.running) return;
     state.running = true;
     state.cancelled = false;
@@ -420,41 +554,81 @@
     const canResume =
       ["running", "error", "cancelled"].includes(state.jobStatus) &&
       state.searchIdentity === currentSearchIdentity;
+    const pendingPage = state.pendingPage;
+    const resumingPendingPage =
+      resumeFromNavigation &&
+      canResume &&
+      pendingPage !== null &&
+      requestedPageNumber() === pendingPage;
     if (!canResume) state.entries = [];
     state.searchIdentity = currentSearchIdentity;
-    state.page = 0;
+    if (!resumingPendingPage) {
+      state.page = 0;
+      state.pendingPage = null;
+    }
     setButtons();
 
     try {
-      state.total = lib.parseResultCount(document.body.innerText || "");
-      if (!state.total) throw new Error("没有在当前页面识别到 MathSciNet 搜索结果总数");
+      state.total = await waitFor(
+        () => lib.parseResultCount(document.body.innerText || ""),
+        "等待 MathSciNet 搜索结果总数",
+        30000,
+        250,
+      );
       state.pages = Math.ceil(state.total / 100);
       setProgress();
-      setStatus(`识别到 ${state.total} 条结果，正在切换到每页 100 条…`);
+      let startPage = 1;
+      if (resumingPendingPage) {
+        startPage = pendingPage;
+        const expectedCount = Math.min(100, state.total - (startPage - 1) * 100);
+        setStatus(`正在恢复第 ${startPage}/${state.pages} 页…`);
+        await waitForRecordSet({
+          expectedCount,
+          expectedRequestedPage: startPage,
+          description: `等待直接访问的第 ${startPage} 页文献列表稳定到 ${expectedCount} 条`,
+        });
+      } else {
+        setStatus(`识别到 ${state.total} 条结果，正在切换到每页 100 条…`);
+        await goToFirstPage();
+        await setPageSizeTo100();
+      }
 
-      await goToFirstPage();
-      await setPageSizeTo100();
-
-      for (let page = 1; page <= state.pages; page += 1) {
+      for (let page = startPage; page <= state.pages; page += 1) {
         state.page = page;
         setProgress();
         setStatus(`正在处理第 ${page}/${state.pages} 页…`);
 
+        await openExportControls();
         await selectAllRecords();
         await chooseBibtex();
         const pageBibtex = await generateAndExtractBibtex();
         state.entries.push(pageBibtex);
         const deduped = lib.dedupeBibtex(state.entries);
         state.entries = deduped.entries;
+        if (resumingPendingPage && page === pendingPage) {
+          const expectedCumulativeCount = Math.min(state.total, page * 100);
+          if (state.entries.length !== expectedCumulativeCount) {
+            throw new Error(
+              `待续页累计数量校验失败：处理第 ${page} 页后预期 ${expectedCumulativeCount} 条，实际 ${state.entries.length} 条`,
+            );
+          }
+          state.pendingPage = null;
+        }
         await saveProgress("running");
         setProgress();
 
         if (page < state.pages) {
-          const advanced = await goToNextPage();
-          if (!advanced) throw new Error(`第 ${page} 页处理完毕，但没有找到可用的 Next 按钮`);
+          const advanceResult = await goToNextPage(page);
+          if (advanceResult === PAGE_ADVANCE_RESULT.navigating) return;
+          if (advanceResult === PAGE_ADVANCE_RESULT.unavailable) {
+            throw new Error(`第 ${page} 页处理完毕，但没有找到可用的 Next 按钮`);
+          }
         }
       }
 
+      if (state.entries.length !== state.total) {
+        throw new Error(`导出数量校验失败：页面显示 ${state.total} 条，实际收集 ${state.entries.length} 条`);
+      }
       const download = downloadBibtex(false);
       await saveProgress("complete");
       setStatus(`完成：${download.count} 条，已下载 ${download.filename}`, "success");
@@ -481,27 +655,37 @@
   async function restoreProgress() {
     const stored = await chrome.storage.local.get(STORAGE_KEY);
     const job = stored[STORAGE_KEY];
-    if (!job || !Array.isArray(job.entries) || job.status === "complete" || !job.searchIdentity) return;
-    if (job.searchIdentity !== searchIdentity()) return;
+    if (!job || !Array.isArray(job.entries) || job.status === "complete" || !job.searchIdentity) return null;
+    if (job.searchIdentity !== searchIdentity()) return null;
     state.entries = job.entries;
     state.page = Number(job.page) || 0;
     state.pages = Number(job.pages) || 0;
     state.total = Number(job.total) || 0;
     state.jobStatus = job.status;
+    state.pendingPage = Number(job.pendingPage) || null;
     state.searchIdentity = job.searchIdentity || searchIdentity();
     setProgress();
     setStatus(`发现上次未完成任务：已保留 ${state.entries.length} 条，可先下载部分结果。`, "warning");
+    return job;
   }
 
   function mountPanel() {
-    if (document.querySelector("#msbe-panel")) return;
-    const panel = document.createElement("section");
-    panel.id = "msbe-panel";
-    panel.innerHTML = `
+    if (document.querySelector("#msbe-root")) return;
+    const rootElement = document.createElement("aside");
+    rootElement.id = "msbe-root";
+    rootElement.innerHTML = `
       <style>
-        #msbe-panel{position:fixed;right:18px;bottom:18px;z-index:2147483647;width:330px;padding:14px;border:1px solid #c8c8d0;border-radius:12px;background:#fff;color:#24242a;box-shadow:0 8px 28px rgba(0,0,0,.22);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
-        #msbe-panel *{box-sizing:border-box}
-        #msbe-panel h2{margin:0 0 8px;font-size:16px}
+        #msbe-root,#msbe-root *{box-sizing:border-box}
+        #msbe-launcher{position:fixed;right:18px;bottom:18px;z-index:2147483647;width:48px;height:48px;border:0;border-radius:50%;background:#6750a4;color:#fff;box-shadow:0 6px 20px rgba(0,0,0,.28);cursor:pointer;font:700 20px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+        #msbe-launcher:hover{background:#57408f} #msbe-launcher:focus-visible{outline:3px solid #b9a7ee;outline-offset:3px}
+        #msbe-launcher[data-kind="success"]{background:#167744} #msbe-launcher[data-kind="error"]{background:#b42318} #msbe-launcher[data-kind="warning"]{background:#9a6700}
+        #msbe-launcher-badge{position:absolute;right:-8px;top:-7px;min-width:27px;padding:3px 5px;border:2px solid #fff;border-radius:12px;background:#24242a;color:#fff;font:600 10px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-variant-numeric:tabular-nums}
+        #msbe-launcher-badge[hidden],#msbe-panel[hidden]{display:none!important}
+        #msbe-panel{position:fixed;right:18px;bottom:78px;z-index:2147483647;width:min(330px,calc(100vw - 36px));max-height:calc(100vh - 110px);overflow:auto;padding:14px;border:1px solid #c8c8d0;border-radius:12px;background:#fff;color:#24242a;box-shadow:0 8px 28px rgba(0,0,0,.22);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+        #msbe-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 8px}
+        #msbe-panel h2{margin:0;font-size:16px}
+        #msbe-collapse{width:28px;height:28px;border:0;border-radius:6px;background:transparent;color:#5d5d68;cursor:pointer;font-size:21px;line-height:1}
+        #msbe-collapse:hover{background:#f0eef6;color:#24242a}
         #msbe-status{min-height:42px;margin:0 0 8px;overflow-wrap:anywhere}
         #msbe-status[data-kind="success"]{color:#0b6b32} #msbe-status[data-kind="error"]{color:#b42318} #msbe-status[data-kind="warning"]{color:#8a5800}
         #msbe-progress{margin:0 0 10px;color:#5d5d68;font-variant-numeric:tabular-nums}
@@ -510,22 +694,42 @@
         #msbe-actions button:nth-child(n+2){background:#fff;color:#4d3c7d}
         #msbe-actions button:disabled{cursor:not-allowed;opacity:.45}
       </style>
-      <h2>MathSciNet 批量导出</h2>
-      <p id="msbe-status">准备就绪。停留在搜索结果页后点击“全部导出”。</p>
-      <p id="msbe-progress">0/? 页 · 0 条</p>
-      <div id="msbe-actions">
-        <button id="msbe-start" type="button">全部导出</button>
-        <button id="msbe-stop" type="button" disabled>停止</button>
-        <button id="msbe-partial" type="button" disabled>下载已收集</button>
-      </div>`;
-    document.documentElement.append(panel);
+      <button id="msbe-launcher" type="button" aria-controls="msbe-panel" aria-expanded="false" aria-label="展开 MathSciNet 批量导出" title="MathSciNet 批量导出">
+        <span aria-hidden="true">↓</span><span id="msbe-launcher-badge" hidden></span>
+      </button>
+      <section id="msbe-panel" hidden aria-labelledby="msbe-title">
+        <div id="msbe-heading">
+          <h2 id="msbe-title">MathSciNet 批量导出</h2>
+          <button id="msbe-collapse" type="button" aria-label="收起导出面板" title="收起">×</button>
+        </div>
+        <p id="msbe-status">准备就绪。停留在搜索结果页后点击“全部导出”。</p>
+        <p id="msbe-progress">0/? 页 · 0 条</p>
+        <div id="msbe-actions">
+          <button id="msbe-start" type="button">全部导出</button>
+          <button id="msbe-stop" type="button" disabled>停止</button>
+          <button id="msbe-partial" type="button" disabled>下载已收集</button>
+        </div>
+      </section>`;
+    document.documentElement.append(rootElement);
 
-    panel.querySelector("#msbe-start").addEventListener("click", runExport);
-    panel.querySelector("#msbe-stop").addEventListener("click", () => {
+    const launcher = rootElement.querySelector("#msbe-launcher");
+    const panel = rootElement.querySelector("#msbe-panel");
+    const setPanelExpanded = (expanded) => {
+      panel.hidden = !expanded;
+      launcher.setAttribute("aria-expanded", String(expanded));
+      launcher.setAttribute("aria-label", `${expanded ? "收起" : "展开"} MathSciNet 批量导出`);
+    };
+    launcher.addEventListener("click", () => {
+      setPanelExpanded(panel.hidden);
+    });
+    rootElement.querySelector("#msbe-collapse").addEventListener("click", () => setPanelExpanded(false));
+
+    rootElement.querySelector("#msbe-start").addEventListener("click", () => runExport());
+    rootElement.querySelector("#msbe-stop").addEventListener("click", () => {
       state.cancelled = true;
       setStatus("正在停止；已收集内容不会丢失…", "warning");
     });
-    panel.querySelector("#msbe-partial").addEventListener("click", () => {
+    rootElement.querySelector("#msbe-partial").addEventListener("click", () => {
       try {
         const download = downloadBibtex(true);
         setStatus(`已下载部分结果：${download.count} 条`, "warning");
@@ -534,8 +738,23 @@
       }
     });
 
-    restoreProgress().catch((error) => setStatus(`读取上次进度失败：${error.message}`, "error"));
+    restoreProgress()
+      .then((job) => {
+        if (
+          job &&
+          ["running", "error"].includes(state.jobStatus) &&
+          state.pendingPage !== null &&
+          requestedPageNumber() === state.pendingPage
+        ) {
+          runExport({ resumeFromNavigation: true });
+        }
+      })
+      .catch((error) => setStatus(`读取上次进度失败：${error.message}`, "error"));
   }
 
-  mountPanel();
-})();
+  return {
+    getState: () => ({ ...state, entries: [...state.entries] }),
+    mountPanel,
+    runExport,
+  };
+});
