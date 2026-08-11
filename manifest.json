@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "MathSciNet BibTeX Batch Exporter",
+  "version": "0.1.0",
+  "description": "Automatically exports every MathSciNet search-result page as one deduplicated BibTeX file.",
+  "permissions": ["clipboardRead", "storage"],
+  "host_permissions": [
+    "https://mathscinet.ams.org/*",
+    "https://mathscinet-ams-org.ezproxy.nottingham.edu.cn/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://mathscinet.ams.org/*",
+        "https://mathscinet-ams-org.ezproxy.nottingham.edu.cn/*"
+      ],
+      "js": ["lib.js", "content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
